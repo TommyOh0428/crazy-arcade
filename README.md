@@ -24,9 +24,9 @@
 
 ### Framework
 
-This project is based on Python
+- This project is based on Python
 
-May use Pygame, or PyGUI, etc
+- May use Pygame, or PyGUI, etc
 
 ### Contribution
 

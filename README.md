@@ -18,8 +18,8 @@
 ### Team member
 
 - Tommy Oh (301544525)
-- Alex Chung
-- Parmveer Singh Nijjar
+- Alex Chung (301549726)
+- Parmveer Singh Nijjar (301563903)
 - Munir Adam
 
 ### Framework

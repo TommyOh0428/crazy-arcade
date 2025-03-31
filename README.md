@@ -38,8 +38,8 @@ The game follows a **client-server architecture**, where one player hosts the se
 ## Gameplay Mechanics  
 
 - The game takes place on a **square grid-based arena** with obstacles providing cover.  
-- **Cannons spawn randomly** on the map, and players must race to reach them.  
-- The first player to **reach a cannon gains exclusive control** (mutex lock).  
+- **A cannon spawns randomly** on the map, and players must race to reach them.  
+- The first player to **reach the cannon gains exclusive control** (mutex lock).  
 - Cannons have a **timed duration of use**—if the player doesn't fire within the time limit, they **explode**.  
 - Each cannon has a **limited number of shots** before becoming inactive.  
 
@@ -59,7 +59,7 @@ The game follows a **client-server architecture**, where one player hosts the se
 - **Sudden Death Mode** activates if the match lasts too long (faster cannon fire, shrinking map).  
 
 ## Winning Condition  
-- The **last player alive wins the round**.  
+- The **last player alive wins**.  
 
 ## Technical Details  
 

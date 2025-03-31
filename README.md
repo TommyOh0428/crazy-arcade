@@ -80,6 +80,40 @@ The game follows a **client-server architecture**, where one player hosts the se
    ```sh
    python server.py
 
+   ## Task Distribution  
+
+The project is developed by a **4-person team**, with each member focusing on a specific aspect of the game.  
+
+### 🖥️ Backend (Client-Server Communication) – **Developer 1**  
+- Implement **server logic** using raw Python sockets.  
+- Handle **message passing** between clients (player positions, cannon control, health updates).  
+- Use **multithreading** or **asyncio** to support multiple players.  
+
+### 🎮 Game Logic & Mechanics – **Developer 2**  
+- Implement **player movement, cannon mechanics, and health tracking**.  
+- Handle **collision detection** for cannon hits.  
+- Manage the **game loop and event handling**.  
+
+### 🖼️ Frontend (Graphics & UI) – **Developer 3**  
+- Implement **player sprites, map rendering, and UI elements** (health bar, timer, etc.).  
+- Display **cannon aiming and shooting animations**.  
+- Ensure smooth **user input handling** (mouse and keyboard).  
+
+### 📡 Networking Integration – **Developer 4**  
+- Connect **frontend to backend** (send and receive player actions).  
+- Optimize **message sending** to reduce latency and improve synchronization.  
+- Handle **game state updates** to ensure all players see consistent gameplay.  
+
+## Development Timeline  
+
+| Week  | Task |
+|-------|------|
+| **Week 1** | Set up **socket-based server**, basic **Pygame UI**, and **game loop**. |
+| **Week 2** | Implement **cannon locking, shooting mechanics, health tracking**. |
+| **Week 3** | Finalize **networking, smooth movement, and latency optimization**. |
+
+
+
 ### Contribution
 
 - placeholder

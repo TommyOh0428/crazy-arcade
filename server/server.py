@@ -20,6 +20,9 @@ class GameServer:
         self.socket.bind((HOST, PORT))
         self.socket.listen(5)
         print(f"Server started on {HOST}:{PORT}")
+        print(f"Server IP: {self.get_ip_address()}")
+        print("Run python client/client.py to connect as local client")
+        print(f"Run python client/client.py {self.get_ip_address()} to connect as remote client")
         
         # Game state
         self.clients = {}  # client_id: connection
@@ -41,6 +44,12 @@ class GameServer:
         # Generate map obstacles
         self.generate_obstacles()
     
+    def get_ip_address(self):
+        """Get the server's IP address"""
+        hostname = socket.gethostname()
+        ip_address = socket.gethostbyname(hostname)
+        return ip_address
+
     def generate_obstacles(self):
         grid_width = self.map_width // self.grid_size
         grid_height = self.map_height // self.grid_size

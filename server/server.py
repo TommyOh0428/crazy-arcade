@@ -79,6 +79,19 @@ class GameServer:
             print(f"Server error: {e}")
         finally:
             self.close()
+
+    def send_message_to_client(self, client_id, msg_type, data):
+        message = {
+            'type': msg_type,
+            'data': data
+        }
+        message_json = json.dumps(message).encode('utf-8')
+        try:
+            self.clients[client_id].sendall(message_json)
+        except Exception as e:
+            print(f"Error sending to client {client_id}: {e}")
+            self.handle_disconnect(client_id)
+
     
     def handle_client(self, client_socket, addr):
         """Handle communication with a connected client"""
@@ -195,6 +208,9 @@ class GameServer:
             dx = message.get('dx', 0)
             dy = message.get('dy', 0)
             self.handle_player_dash(client_id, dx, dy)
+
+        elif msg_type == 'ping':
+            self.send_message_to_client(client_id, 'pong', {})
     
     def handle_cannon_pickup(self, client_id, cannon_id):
         """Handle a player attempting to pick up a cannon"""

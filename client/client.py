@@ -149,6 +149,10 @@ class Obstacle:
 
 class GameClient:
     def __init__(self, server_address=DEFAULT_SERVER, port=DEFAULT_PORT):
+        self.last_ping_time = 0
+        self.ping_interval = 5  # seconds
+        self.ping_sent_time = 0
+        self.latency_ms = None
         # Initialize pygame
         pygame.init()
         self.window = pygame.display.set_mode((WINDOW_WIDTH, WINDOW_HEIGHT))
@@ -423,6 +427,11 @@ class GameClient:
             if player_id in self.players:
                 del self.players[player_id]
                 self.add_message("A player left the game.")
+
+        elif msg_type == 'pong':
+            now = time.time()
+            rtt = (now - self.ping_sent_time) * 1000  # Round-trip time in ms
+            self.latency_ms = int(rtt)
     
     def send_update(self):
         """Send player update to server"""
@@ -626,6 +635,10 @@ class GameClient:
         alive_players = sum(1 for player in self.players.values() if player.alive)
         text = self.small_font.render(f"Players: {alive_players}/{len(self.players)}", True, WHITE)
         self.window.blit(text, (10, 10))
+
+        if self.latency_ms is not None:
+            text = self.small_font.render(f"Ping: {self.latency_ms} ms", True, WHITE)
+            self.window.blit(text, (10, 30))
         
         # Draw controls help
         text = self.small_font.render("WASD: Move | E: Pick up cannon | SPACE: Dash | Click: Shoot", True, WHITE)
@@ -672,6 +685,15 @@ class GameClient:
             
             # Send position updates to server
             self.send_update()
+
+        current_time = time.time()
+        if current_time - self.last_ping_time > self.ping_interval:
+            self.last_ping_time = current_time
+            self.ping_sent_time = current_time
+            try:
+                self.socket.sendall(json.dumps({'type': 'ping'}).encode('utf-8'))
+            except Exception as e:
+                print(f"Error sending ping: {e}")
     
     def disconnect(self):
         """Disconnect from the server"""

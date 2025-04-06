@@ -632,8 +632,9 @@ class GameClient:
             self.window.blit(text, (WINDOW_WIDTH//2 - text.get_width()//2, 10))
         
         # Draw player count
+        max_players = 4  
         alive_players = sum(1 for player in self.players.values() if player.alive)
-        text = self.small_font.render(f"Players: {alive_players}/{len(self.players)}", True, WHITE)
+        text = self.small_font.render(f"Players: {alive_players}/{max_players}", True, WHITE)
         self.window.blit(text, (10, 10))
 
         if self.latency_ms is not None:

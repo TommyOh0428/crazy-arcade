@@ -71,58 +71,48 @@ class Player:
         pygame.draw.rect(surface, GREEN, (self.x - 20, self.y - 30, health_width, 5))
 
 class Cannon:
-    def __init__(self, data):
-        self.id = data['id']
-        self.x = data['x']
-        self.y = data['y']
-        self.type = data['type']
-        self.shots_left = data['shots_left']
-        self.controlled_by = data.get('controlled_by')
-        self.color = tuple(data['color']) if isinstance(data['color'], list) else data['color']
-    
-    def update(self, data):
-        """Update cannon state from server data"""
-        if 'x' in data:
-            self.x = data['x']
-        if 'y' in data:
-            self.y = data['y']
-        if 'shots_left' in data:
-            self.shots_left = data['shots_left']
-        if 'controlled_by' in data:
-            self.controlled_by = data['controlled_by']
-    
+    def __init__(self, x, y):
+        self.x = x
+        self.y = y
+        self.radius = 20
+        self.color = (128, 128, 128)  # Gray color for the cannon
+        self.projectiles = []
+
     def draw(self, surface):
-        # Draw cannon
-        pygame.draw.circle(surface, self.color, (int(self.x), int(self.y)), 15)
-        if self.controlled_by is None:
-            # Draw indicator for available cannon
-            pygame.draw.circle(surface, WHITE, (int(self.x), int(self.y)), 20, 2)
-        
-        # Draw shots left if cannon is being used
-        if self.controlled_by is not None:
-            font = pygame.font.SysFont(None, 24)
-            text = font.render(str(self.shots_left), True, WHITE)
-            surface.blit(text, (self.x - text.get_width() // 2, self.y - text.get_height() // 2))
+        # Draw the cannon as a circle
+        pygame.draw.circle(surface, self.color, (int(self.x), int(self.y)), self.radius)
+
+        # Draw projectiles
+        for projectile in self.projectiles:
+            projectile.draw(surface)
+
+    def shoot(self):
+        # Add a new projectile starting from the cannon's position
+        self.projectiles.append(Projectile(self.x, self.y, 0, -5))  # Shoots upward
+
+    def update(self):
+        # Update all projectiles
+        for projectile in self.projectiles:
+            projectile.update()
+
+        # Remove projectiles that go off-screen
+        self.projectiles = [p for p in self.projectiles if p.y > 0]
 
 class Projectile:
-    def __init__(self, data):
-        self.id = data['id']
-        self.x = data['x']
-        self.y = data['y']
-        self.dx = data['dx']
-        self.dy = data['dy']
-        self.radius = data['radius']
-        self.color = tuple(data['color']) if isinstance(data['color'], list) else data['color']
-    
-    def update(self, data):
-        """Update projectile state from server data"""
-        if 'x' in data:
-            self.x = data['x']
-        if 'y' in data:
-            self.y = data['y']
-    
+    def __init__(self, x, y, dx, dy):
+        self.x = x
+        self.y = y
+        self.dx = dx
+        self.dy = dy
+        self.radius = 5
+        self.color = (255, 0, 0)  # Red color for projectiles
+
     def draw(self, surface):
         pygame.draw.circle(surface, self.color, (int(self.x), int(self.y)), self.radius)
+
+    def update(self):
+        self.x += self.dx
+        self.y += self.dy
 
 class PowerUp:
     def __init__(self, data):
@@ -192,6 +182,9 @@ class GameClient:
         self.input_y = 0
         self.last_send_time = 0
         self.input_update_rate = 0.05  # 20 updates per second
+
+        # Add a cannon to the game
+        self.cannon = Cannon(WINDOW_WIDTH // 2, WINDOW_HEIGHT // 2)
     
     def connect_to_server(self):
         """Connect to the game server"""
@@ -571,6 +564,8 @@ class GameClient:
             # Space for dash
             elif event.type == pygame.KEYDOWN and event.key == pygame.K_SPACE:
                 self.try_dash()
+                if self.cannon:
+                    self.cannon.shoot()
             
             # E for picking up cannons
             elif event.type == pygame.KEYDOWN and event.key == pygame.K_e:
@@ -622,11 +617,40 @@ class GameClient:
         
         # Ensure the local player is initialized for testing
         if not self.local_player:
-            self.local_player = Player(WINDOW_WIDTH // 2, WINDOW_HEIGHT // 2, (255, 0, 0), "test_player")
+            player_x = random.randint(PLAYER_RADIUS, WINDOW_WIDTH - PLAYER_RADIUS)
+            player_y = random.randint(PLAYER_RADIUS, WINDOW_HEIGHT - PLAYER_RADIUS)
+            self.local_player = Player(player_x, player_y, (255, 0, 0), "test_player")
 
         # Draw the local player
         if self.local_player:
             self.local_player.draw(self.window)
+
+        # Ensure the cannon spawns separately and the player must reach it to equip
+        if not self.cannon:
+            cannon_x = random.randint(PLAYER_RADIUS, WINDOW_WIDTH - PLAYER_RADIUS)
+            cannon_y = random.randint(PLAYER_RADIUS, WINDOW_HEIGHT - PLAYER_RADIUS)
+            self.cannon = Cannon(cannon_x, cannon_y)
+
+        if self.cannon:
+            self.cannon.draw(self.window)
+
+        # Check if the player is near the cannon to equip it
+        if self.local_player and not self.local_player.has_cannon and self.cannon:
+            dx = self.local_player.x - self.cannon.x
+            dy = self.local_player.y - self.cannon.y
+            distance = math.sqrt(dx**2 + dy**2)
+
+            if distance < PLAYER_RADIUS + self.cannon.radius:
+                self.local_player.has_cannon = True
+                self.add_message("You equipped the cannon!")
+
+        # If the player has the cannon, update cannon position to follow the player
+        if self.local_player and self.local_player.has_cannon:
+            self.cannon.x = self.local_player.x
+            self.cannon.y = self.local_player.y
+
+            # Draw the cannon instead of the player
+            self.cannon.draw(self.window)
         
         # Draw UI elements
         if self.sudden_death:
@@ -720,6 +744,10 @@ class GameClient:
         # Ensure sudden death mode activates when timer reaches zero
         if self.sudden_death_timer <= 0 and not self.sudden_death:
             self.sudden_death = True
+
+        # Update the cannon
+        if self.cannon:
+            self.cannon.update()
     
     def disconnect(self):
         """Disconnect from the server"""

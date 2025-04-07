@@ -151,8 +151,8 @@ class GameServer:
             # Broadcast to all clients about new player
             self.broadcast_game_update()
             
-            # If we have at least 2 players and game hasn't started yet, start it
-            if len(self.players) >= 2 and not self.game_started:
+            # Start the game with just one player (instead of requiring two)
+            if not self.game_started:
                 self.game_started = True
                 self.broadcast_message('game_start', {'message': 'Game starting!'})
                 # Spawn the first cannon
@@ -363,11 +363,11 @@ class GameServer:
                 cannon_types = ['RAPID', 'EXPLOSIVE', 'BOUNCING']
                 cannon_type = random.choice(cannon_types)
                 
-                # Set properties based on type
+                # Set properties based on type - increasing speeds significantly
                 properties = {
-                    'RAPID': {'damage': 10, 'speed': 12, 'cooldown': 0.3, 'shots': 10, 'radius': 5, 'color': (255, 0, 0)},
-                    'EXPLOSIVE': {'damage': 30, 'speed': 6, 'cooldown': 1.0, 'shots': 3, 'radius': 15, 'color': (255, 255, 0)},
-                    'BOUNCING': {'damage': 15, 'speed': 8, 'cooldown': 0.7, 'shots': 5, 'radius': 8, 'color': (0, 255, 0)}
+                    'RAPID': {'damage': 10, 'speed': 40, 'cooldown': 0.3, 'shots': 10, 'radius': 5, 'color': (255, 0, 0)},
+                    'EXPLOSIVE': {'damage': 30, 'speed': 25, 'cooldown': 1.0, 'shots': 3, 'radius': 15, 'color': (255, 255, 0)},
+                    'BOUNCING': {'damage': 15, 'speed': 35, 'cooldown': 0.7, 'shots': 5, 'radius': 8, 'color': (0, 255, 0)}
                 }
                 
                 # Create the cannon
@@ -614,7 +614,8 @@ class GameServer:
                     self.update_powerups(delta_time)
                     
                     # Spawn new cannon if needed (every 5 seconds)
-                    if current_time - last_cannon_spawn_time >= 5 and len(self.cannons) < 3:
+                    if current_time - last_cannon_spawn_time >= 5 and len(self.cannons) == 0:
+                        # Only spawn a new cannon if there are no cannons currently in the game
                         self.spawn_cannon()
                         last_cannon_spawn_time = current_time
                     

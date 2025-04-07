@@ -7,6 +7,11 @@ from pygame.locals import *
 import sys
 import random
 import math
+from player import Player
+from cannon import Cannon
+from projectile import Projectile
+from obstacle import Obstacle
+from powerup import PowerUp
 
 # Game constants
 WINDOW_WIDTH = 1000
@@ -27,115 +32,6 @@ YELLOW = (255, 255, 0)
 DEFAULT_SERVER = "127.0.0.1"
 DEFAULT_PORT = 5555
 BUFFER_SIZE = 4096
-
-class Player:
-    def __init__(self, x, y, color, player_id):
-        self.x = x
-        self.y = y
-        self.color = color
-        self.id = player_id
-        self.health = PLAYER_MAX_HEALTH
-        self.speed = 5
-        self.dash_cooldown = 0
-        self.is_dashing = False
-        self.alive = True
-        self.has_cannon = False
-        self.cannon_id = None
-        self.dash_direction = (0, 0)
-    
-    def update(self, data):
-        """Update player state from server data"""
-        if 'x' in data:
-            self.x = data['x']
-        if 'y' in data:
-            self.y = data['y']
-        if 'health' in data:
-            self.health = data['health']
-        if 'alive' in data:
-            self.alive = data['alive']
-        if 'has_cannon' in data:
-            self.has_cannon = data['has_cannon']
-        if 'cannon_id' in data:
-            self.cannon_id = data['cannon_id']
-        if 'dash_cooldown' in data:
-            self.dash_cooldown = data['dash_cooldown']
-    
-    def draw(self, surface):
-        if not self.alive:
-            return
-            
-        pygame.draw.circle(surface, self.color, (int(self.x), int(self.y)), PLAYER_RADIUS)
-        # Draw health bar
-        health_width = 40 * (self.health / PLAYER_MAX_HEALTH)
-        pygame.draw.rect(surface, RED, (self.x - 20, self.y - 30, 40, 5))
-        pygame.draw.rect(surface, GREEN, (self.x - 20, self.y - 30, health_width, 5))
-
-class Cannon:
-    def __init__(self, x, y):
-        self.x = x
-        self.y = y
-        self.radius = 20
-        self.color = (128, 128, 128)  # Gray color for the cannon
-        self.projectiles = []
-
-    def draw(self, surface):
-        # Draw the cannon as a circle
-        pygame.draw.circle(surface, self.color, (int(self.x), int(self.y)), self.radius)
-
-        # Draw projectiles
-        for projectile in self.projectiles:
-            projectile.draw(surface)
-
-    def shoot(self):
-        # Add a new projectile starting from the cannon's position
-        self.projectiles.append(Projectile(self.x, self.y, 0, -5))  # Shoots upward
-
-    def update(self):
-        # Update all projectiles
-        for projectile in self.projectiles:
-            projectile.update()
-
-        # Remove projectiles that go off-screen
-        self.projectiles = [p for p in self.projectiles if p.y > 0]
-
-class Projectile:
-    def __init__(self, x, y, dx, dy):
-        self.x = x
-        self.y = y
-        self.dx = dx
-        self.dy = dy
-        self.radius = 5
-        self.color = (255, 0, 0)  # Red color for projectiles
-
-    def draw(self, surface):
-        pygame.draw.circle(surface, self.color, (int(self.x), int(self.y)), self.radius)
-
-    def update(self):
-        self.x += self.dx
-        self.y += self.dy
-
-class PowerUp:
-    def __init__(self, data):
-        self.id = data['id']
-        self.x = data['x']
-        self.y = data['y']
-        self.type = data['type']
-        self.radius = data.get('radius', 10)
-        self.color = tuple(data['color']) if isinstance(data['color'], list) else data['color']
-    
-    def draw(self, surface):
-        pygame.draw.circle(surface, self.color, (int(self.x), int(self.y)), self.radius)
-
-class Obstacle:
-    def __init__(self, data):
-        self.x = data['x']
-        self.y = data['y']
-        self.width = data['width']
-        self.height = data['height']
-        self.rect = pygame.Rect(self.x, self.y, self.width, self.height)
-    
-    def draw(self, surface):
-        pygame.draw.rect(surface, BLUE, self.rect)
 
 class GameClient:
     def __init__(self, server_address=DEFAULT_SERVER, port=DEFAULT_PORT):
@@ -747,7 +643,7 @@ class GameClient:
 
         # Update the cannon
         if self.cannon:
-            self.cannon.update()
+            self.cannon.update()  # Pass an empty dictionary if no data is available
     
     def disconnect(self):
         """Disconnect from the server"""

@@ -94,7 +94,8 @@ class GameServer:
             'type': msg_type,
             'data': data
         }
-        message_json = json.dumps(message).encode('utf-8')
+        message_json = (json.dumps(message) + "\n").encode('utf-8')
+        print(f"Sending message to client {client_id}: {message_json.decode('utf-8')}")  # Debugging log
         try:
             self.clients[client_id].sendall(message_json)
         except Exception as e:
@@ -105,24 +106,35 @@ class GameServer:
     def handle_client(self, client_socket, addr):
         """Handle communication with a connected client"""
         try:
-            # First message should be player registration
+            # Request nickname from the client
+            client_socket.sendall(json.dumps({"type": "request_nickname"}).encode('utf-8'))
             data = client_socket.recv(BUFFER_SIZE)
+            print(f"Received nickname response: {data.decode('utf-8')}")  # Debugging log
             if not data:
                 return
-            
-            # Register the player
-            player_info = json.loads(data.decode('utf-8'))
+
+            # Ensure the received data is complete and valid JSON
+            try:
+                decoded_data = data.decode('utf-8') # Debugging log
+                player_info = json.loads(decoded_data)
+            except json.JSONDecodeError as e:
+                print(f"JSON decode error: {e}")
+                return
+
+            # Register the player with their nickname
+            nickname = player_info.get('nickname', f'Player_{random.randint(1000, 9999)}')
             client_id = player_info.get('client_id', str(random.randint(1000, 9999)))
-            
+
             # Assign player ID and starting position
             x = random.randint(50, self.map_width - 50)
             y = random.randint(50, self.map_height - 50)
             color = player_info.get('color', (255, 0, 0))  # Default to red if not specified
-            
+
             # Add player to the game
             self.clients[client_id] = client_socket
             self.players[client_id] = {
                 'id': client_id,
+                'nickname': nickname,  # Ensure nickname is included
                 'x': x,
                 'y': y,
                 'color': color,
@@ -133,7 +145,7 @@ class GameServer:
                 'speed': 5,
                 'dash_cooldown': 0
             }
-            
+
             # Send initial game state to client
             initial_state = {
                 'type': 'init',
@@ -147,23 +159,23 @@ class GameServer:
                 'powerups': self.powerups
             }
             client_socket.sendall(json.dumps(initial_state).encode('utf-8'))
-            
+
             # Broadcast to all clients about new player
             self.broadcast_game_update()
-            
+
             # If we have at least 2 players and game hasn't started yet, start it
             if len(self.players) >= 2 and not self.game_started:
                 self.game_started = True
                 self.broadcast_message('game_start', {'message': 'Game starting!'})
                 # Spawn the first cannon
                 self.spawn_cannon()
-            
+
             # Main client communication loop
             while self.running:
                 data = client_socket.recv(BUFFER_SIZE)
                 if not data:
                     break
-                
+
                 # Parse and handle client message
                 try:
                     message = json.loads(data.decode('utf-8'))
@@ -172,7 +184,7 @@ class GameServer:
                     print(f"Invalid JSON from client {client_id}")
                 except Exception as e:
                     print(f"Error handling client message: {e}")
-        
+
         except Exception as e:
             print(f"Client handler error: {e}")
         finally:
@@ -635,6 +647,7 @@ class GameServer:
     
     def broadcast_game_update(self):
         """Send current game state to all clients"""
+        print(f"Broadcasting game update with players: {self.players}")  # Debugging log
         state = {
             'type': 'game_update',
             'players': self.players,
@@ -652,7 +665,8 @@ class GameServer:
             'type': msg_type,
             'data': data
         }
-        message_json = json.dumps(message).encode('utf-8')
+        message_json = (json.dumps(message) + "\n").encode('utf-8')
+        print(f"Broadcasting message: {message_json.decode('utf-8')}")  # Debugging log
         
         for client_id, client_socket in list(self.clients.items()):
             try:

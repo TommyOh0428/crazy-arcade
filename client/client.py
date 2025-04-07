@@ -82,50 +82,113 @@ class GameClient:
         # Add a cannon to the game
         self.cannon = Cannon(WINDOW_WIDTH // 2, WINDOW_HEIGHT // 2)
     
+    def get_nickname(self):
+        """Display a text input field in Pygame for the user to enter their nickname."""
+        input_box = pygame.Rect(WINDOW_WIDTH // 2 - 100, WINDOW_HEIGHT // 2 - 20, 200, 40)
+        color_inactive = pygame.Color('lightskyblue3')
+        color_active = pygame.Color('dodgerblue2')
+        color = color_inactive
+        active = False
+        text = ''
+        font = pygame.font.Font(None, 32)
+
+        while True:
+            for event in pygame.event.get():
+                if event.type == pygame.QUIT:
+                    pygame.quit()
+                    sys.exit()
+                if event.type == pygame.MOUSEBUTTONDOWN:
+                    # Toggle the active state if the user clicks the input box
+                    if input_box.collidepoint(event.pos):
+                        active = not active
+                    else:
+                        active = False
+                    color = color_active if active else color_inactive
+                if event.type == pygame.KEYDOWN:
+                    if active:
+                        if event.key == pygame.K_RETURN:
+                            if text.strip():  # Ensure nickname is not empty
+                                return text.strip()  # Return the entered nickname
+                            else:
+                                print("Nickname cannot be empty. Please enter a valid nickname.")
+                        elif event.key == pygame.K_BACKSPACE:
+                            text = text[:-1]
+                        else:
+                            text += event.unicode
+
+            # Render the input box and text
+            self.window.fill(BLACK)
+            txt_surface = font.render(text, True, color)
+            width = max(200, txt_surface.get_width() + 10)
+            input_box.w = width
+            self.window.blit(txt_surface, (input_box.x + 5, input_box.y + 5))
+            pygame.draw.rect(self.window, color, input_box, 2)
+
+            # Display instructions
+            instructions = font.render("Enter your nickname and press Enter", True, WHITE)
+            self.window.blit(instructions, (WINDOW_WIDTH // 2 - instructions.get_width() // 2, WINDOW_HEIGHT // 2 - 60))
+
+            pygame.display.flip()
+            self.clock.tick(30)
+
     def connect_to_server(self):
         """Connect to the game server"""
         try:
             self.socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
             self.socket.connect((self.server_address, self.port))
-            
+
+            # Get the nickname from the user
+            nickname = self.get_nickname()
+
             # Generate a random color for this player
             color = (random.randint(100, 255), random.randint(100, 255), random.randint(100, 255))
-            
+
             # Send player registration
             registration = {
+                'type': 'nickname_response',
+                'nickname': nickname,
                 'client_id': f"player_{random.randint(1000, 9999)}",
                 'color': color
             }
+            print(f"Sending nickname response: {json.dumps(registration)}")  # Debugging log
             self.socket.sendall(json.dumps(registration).encode('utf-8'))
-            
+
             # Start listening for server messages
             self.connected = True
             receive_thread = threading.Thread(target=self.receive_messages)
             receive_thread.daemon = True
             receive_thread.start()
-            
+
             return True
         except Exception as e:
             print(f"Error connecting to server: {e}")
             return False
     
+
     def receive_messages(self):
-        """Listen for messages from the server"""
+        """Listen for messages from the server using JSONDecoder to handle concatenated messages."""
+        buffer = ""
+        decoder = json.JSONDecoder()
         while self.connected:
             try:
                 data = self.socket.recv(BUFFER_SIZE)
                 if not data:
                     self.disconnect()
                     break
-                
-                try:
-                    message = json.loads(data.decode('utf-8'))
-                    self.handle_server_message(message)
-                except json.JSONDecodeError:
-                    print("Invalid JSON received from server")
-                except Exception as e:
-                    print(f"Error processing server message: {e}")
-            
+
+                buffer += data.decode('utf-8')
+
+                # Process any complete JSON objects in the buffer
+                while buffer:
+                    try:
+                        message, index = decoder.raw_decode(buffer)
+                        self.handle_server_message(message)
+                        # Remove the processed JSON object and any leading whitespace from the buffer
+                        buffer = buffer[index:].lstrip()
+                    except json.JSONDecodeError:
+                        # Break out if there's incomplete data and wait for more
+                        break
+
             except ConnectionError:
                 self.disconnect()
                 break
@@ -142,12 +205,15 @@ class GameClient:
         if msg_type == 'init':
             # Initial game state
             self.client_id = data.get('client_id')
+            print(f"Client ID: {self.client_id}")  # Debugging log
+            print(f"Players dictionary: {self.players}")  # Debugging log
             
             # Process players
             for player_id, player_data in data.get('players', {}).items():
+                print(f"Processing player {player_id} with data: {player_data}")  # Debugging log
                 if player_id not in self.players:
                     color = tuple(player_data['color']) if isinstance(player_data['color'], list) else player_data['color']
-                    self.players[player_id] = Player(player_data['x'], player_data['y'], color, player_id)
+                    self.players[player_id] = Player(player_data['x'], player_data['y'], color, player_id, player_data.get('nickname', ''))
                     if player_id == self.client_id:
                         self.local_player = self.players[player_id]
                 else:
@@ -162,13 +228,17 @@ class GameClient:
             
             # Update players
             for player_id, player_data in data.get('players', {}).items():
+                print(f"Game update received for player {player_id}: {player_data}")  # Debugging log
+                print(f"Processing player {player_id} with data: {player_data}")  # Debugging log
                 if player_id not in self.players:
                     color = tuple(player_data['color']) if isinstance(player_data['color'], list) else player_data['color']
-                    self.players[player_id] = Player(player_data['x'], player_data['y'], color, player_id)
+                    self.players[player_id] = Player(player_data['x'], player_data['y'], color, player_id, player_data.get('nickname', ''))
                     if player_id == self.client_id:
                         self.local_player = self.players[player_id]
                 else:
                     self.players[player_id].update(player_data)
+                    # Ensure nickname is updated
+                    self.players[player_id].nickname = player_data.get('nickname', self.players[player_id].nickname)
             
             # Update cannons
             current_cannons = set()
@@ -503,24 +573,21 @@ class GameClient:
         for cannon_id, cannon in self.cannons.items():
             cannon.draw(self.window)
         
-        # Draw players
+        # Draw all players from the players dictionary
         for player_id, player in self.players.items():
+            print(f"Rendering player {player_id} with nickname: {player.nickname}")
             player.draw(self.window)
         
-        # Draw projectiles
-        for projectile_id, projectile in self.projectiles.items():
-            projectile.draw(self.window)
-        
-        # Ensure the local player is initialized for testing
-        if not self.local_player:
+        # Only create a fallback test player if we haven't yet received a client_id from the server
+        if not self.local_player and self.client_id is None:
             player_x = random.randint(PLAYER_RADIUS, WINDOW_WIDTH - PLAYER_RADIUS)
             player_y = random.randint(PLAYER_RADIUS, WINDOW_HEIGHT - PLAYER_RADIUS)
             self.local_player = Player(player_x, player_y, (255, 0, 0), "test_player")
-
-        # Draw the local player
+        
+        # Draw the local player if available
         if self.local_player:
             self.local_player.draw(self.window)
-
+        
         # Ensure the cannon spawns separately and the player must reach it to equip
         if not self.cannon:
             cannon_x = random.randint(PLAYER_RADIUS, WINDOW_WIDTH - PLAYER_RADIUS)
@@ -535,7 +602,6 @@ class GameClient:
             dx = self.local_player.x - self.cannon.x
             dy = self.local_player.y - self.cannon.y
             distance = math.sqrt(dx**2 + dy**2)
-
             if distance < PLAYER_RADIUS + self.cannon.radius:
                 self.local_player.has_cannon = True
                 self.add_message("You equipped the cannon!")
@@ -544,20 +610,17 @@ class GameClient:
         if self.local_player and self.local_player.has_cannon:
             self.cannon.x = self.local_player.x
             self.cannon.y = self.local_player.y
-
-            # Draw the cannon instead of the player
             self.cannon.draw(self.window)
-        
+
         # Draw UI elements
         if self.sudden_death:
             text = self.font.render("SUDDEN DEATH", True, RED)
-            self.window.blit(text, (WINDOW_WIDTH//2 - text.get_width()//2, 10))
+            self.window.blit(text, (WINDOW_WIDTH // 2 - text.get_width() // 2, 10))
         else:
-            # Draw timer until sudden death
             minutes = max(0, int(self.sudden_death_timer // 60))
             seconds = max(0, int(self.sudden_death_timer % 60))
             text = self.font.render(f"Sudden Death: {minutes}:{seconds:02d}", True, WHITE)
-            self.window.blit(text, (WINDOW_WIDTH//2 - text.get_width()//2, 10))
+            self.window.blit(text, (WINDOW_WIDTH // 2 - text.get_width() // 2, 10))
         
         # Draw player count
         max_players = 4  
@@ -565,25 +628,36 @@ class GameClient:
         text = self.small_font.render(f"Players: {alive_players}/{max_players}", True, WHITE)
         self.window.blit(text, (10, 10))
 
+        # Draw player nicknames and count
+        player_list_y = 50
+        text = self.small_font.render(f"Players ({len(self.players)}):", True, WHITE)
+        self.window.blit(text, (10, player_list_y))
+        player_list_y += 20
+        for player_id, player in self.players.items():
+            nickname = player.nickname if hasattr(player, 'nickname') else player_id
+            text = self.small_font.render(f"{nickname}", True, WHITE)
+            self.window.blit(text, (10, player_list_y))
+            player_list_y += 20
+
         if self.latency_ms is not None:
             text = self.small_font.render(f"Ping: {self.latency_ms} ms", True, WHITE)
             self.window.blit(text, (10, 30))
         
         # Draw controls help
         text = self.small_font.render("WASD: Move | E: Pick up cannon | SPACE: Dash | Click: Shoot", True, WHITE)
-        self.window.blit(text, (WINDOW_WIDTH//2 - text.get_width()//2, WINDOW_HEIGHT - 30))
+        self.window.blit(text, (WINDOW_WIDTH // 2 - text.get_width() // 2, WINDOW_HEIGHT - 30))
         
         # Draw messages
         message_y = 50
         for message in self.messages:
             text = self.small_font.render(message['text'], True, WHITE)
-            self.window.blit(text, (WINDOW_WIDTH//2 - text.get_width()//2, message_y))
+            self.window.blit(text, (WINDOW_WIDTH // 2 - text.get_width() // 2, message_y))
             message_y += 25
         
         # Draw game over screen
         if self.game_over:
             overlay = pygame.Surface((WINDOW_WIDTH, WINDOW_HEIGHT), pygame.SRCALPHA)
-            overlay.fill((0, 0, 0, 128))  # Semi-transparent black
+            overlay.fill((0, 0, 0, 128))
             self.window.blit(overlay, (0, 0))
             
             if self.winner_id == self.client_id:
@@ -591,12 +665,10 @@ class GameClient:
             else:
                 text = self.font.render("GAME OVER", True, RED)
             
-            self.window.blit(text, (WINDOW_WIDTH//2 - text.get_width()//2, WINDOW_HEIGHT//2 - text.get_height()//2))
-            
+            self.window.blit(text, (WINDOW_WIDTH // 2 - text.get_width() // 2, WINDOW_HEIGHT // 2 - text.get_height() // 2))
             text = self.small_font.render("New game starting soon...", True, WHITE)
-            self.window.blit(text, (WINDOW_WIDTH//2 - text.get_width()//2, WINDOW_HEIGHT//2 + 50))
+            self.window.blit(text, (WINDOW_WIDTH // 2 - text.get_width() // 2, WINDOW_HEIGHT // 2 + 50))
         
-        # Update display
         pygame.display.update()
     
     def update(self):
@@ -664,18 +736,24 @@ class GameClient:
             return
         
         self.running = True
-        while self.running:
-            # Handle user input
-            self.handle_input()
-            
-            # Update game state
-            self.update()
-            
-            # Render the game
-            self.draw()
-            
-            # Cap the frame rate
-            self.clock.tick(60)
+        try:
+            while self.running:
+                # Handle user input
+                self.handle_input()
+                
+                # Update game state
+                self.update()
+                
+                # Render the game
+                self.draw()
+                
+                # Cap the frame rate
+                self.clock.tick(60)
+        except KeyboardInterrupt:
+            print("Disconnecting and exiting...")
+            self.disconnect()
+            pygame.quit()
+            sys.exit()
         
         # Clean up
         self.disconnect()

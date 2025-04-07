@@ -57,7 +57,7 @@ class GameServer:
         # Create a pattern of obstacles
         for i in range(1, grid_width - 1):
             for j in range(1, grid_height - 1):
-                if (i + j) % 3 == 0:  # Create a pattern
+                if (i + j) % 2 == 0:  # Create a pattern
                     self.obstacles.append({
                         'x': i * self.grid_size,
                         'y': j * self.grid_size,

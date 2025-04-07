@@ -161,23 +161,30 @@ class GameClient:
     def extract_json(self, buffer):
         """Extract a complete JSON object from the buffer"""
         try:
-            # Try to find a complete JSON object
+            # Try to find a complete JSON object with proper message boundary handling
             json_start = buffer.find('{')
             if json_start == -1:
                 return None, buffer  # No JSON start found
             
-            # Parse the JSON from the start
-            parsed = json.loads(buffer[json_start:])
-            # If successful, remove the parsed portion from the buffer
-            return parsed, ""
-        except json.JSONDecodeError as e:
-            if e.pos > 0:
-                # If we have a partial object, try to find where it ends
-                try:
-                    obj = json.loads(buffer[json_start:json_start + e.pos])
-                    return obj, buffer[json_start + e.pos:]
-                except:
-                    pass
+            # Find where the JSON object ends
+            depth = 0
+            for i in range(json_start, len(buffer)):
+                if buffer[i] == '{':
+                    depth += 1
+                elif buffer[i] == '}':
+                    depth -= 1
+                    if depth == 0:
+                        # Found a complete JSON object
+                        try:
+                            obj = json.loads(buffer[json_start:i+1])
+                            return obj, buffer[i+1:]  # Return parsed object and remainder
+                        except json.JSONDecodeError:
+                            pass  # Not a valid JSON, continue searching
+            
+            # No complete JSON found
+            return None, buffer
+        except Exception as e:
+            print(f"Error parsing JSON: {e}")
             return None, buffer
     
     def handle_server_message(self, message):
@@ -241,7 +248,26 @@ class GameClient:
                     # Only update other players from server data
                     # For local player, we handle movement locally for responsiveness
                     if player_id != self.client_id:
-                        self.players[player_id].update(player_data)
+                        # For remote players, store their current position for interpolation
+                        if hasattr(self.players[player_id], 'x') and hasattr(self.players[player_id], 'y'):
+                            self.players[player_id].prev_x = self.players[player_id].x
+                            self.players[player_id].prev_y = self.players[player_id].y
+                            self.players[player_id].interp_start_time = time.time()
+                        else:
+                            # First update, no interpolation needed
+                            self.players[player_id].prev_x = player_data['x']
+                            self.players[player_id].prev_y = player_data['y']
+                            self.players[player_id].interp_start_time = time.time()
+                            
+                        # Set target position from server
+                        self.players[player_id].target_x = player_data['x']
+                        self.players[player_id].target_y = player_data['y']
+                        
+                        # Update other properties immediately
+                        player_copy = player_data.copy()
+                        if 'x' in player_copy: del player_copy['x']
+                        if 'y' in player_copy: del player_copy['y']
+                        self.players[player_id].update(player_copy)
                     else:
                         # For local player, only update non-position properties
                         local_data = player_data.copy()
@@ -718,8 +744,28 @@ class GameClient:
         if self.local_player and self.local_player.alive and self.local_player.dash_cooldown > 0:
             self.local_player.dash_cooldown = max(0, self.local_player.dash_cooldown - delta_time)
         
-        # Send periodic ping for latency measurement
+        # Interpolate positions for other players to reduce jitter
         current_time = time.time()
+        for player_id, player in self.players.items():
+            # Skip local player, we control it directly
+            if player_id == self.client_id:
+                continue
+                
+            # Skip players without interpolation data
+            if not hasattr(player, 'interp_start_time') or not hasattr(player, 'target_x'):
+                continue
+                
+            # Interpolate over 100ms (adjust this value based on average network latency)
+            interp_duration = 0.1  # seconds
+            time_since_update = current_time - player.interp_start_time
+            progress = min(time_since_update / interp_duration, 1.0)
+            
+            # Linear interpolation between previous position and target position
+            if hasattr(player, 'prev_x') and hasattr(player, 'prev_y'):
+                player.x = player.prev_x + (player.target_x - player.prev_x) * progress
+                player.y = player.prev_y + (player.target_y - player.prev_y) * progress
+        
+        # Send periodic ping for latency measurement
         if self.connected and current_time - self.last_ping_time > self.ping_interval:
             self.last_ping_time = current_time
             self.ping_sent_time = current_time

@@ -11,7 +11,7 @@ PORT = 5555
 BUFFER_SIZE = 4096
 
 # Game state constants
-UPDATE_INTERVAL = 0.03  # 30 updates per second
+UPDATE_INTERVAL = 0.05  # Reduced from 0.03 (30 updates) to 0.05 (20 updates per second)
 
 class GameServer:
     def __init__(self):
@@ -104,6 +104,9 @@ class GameServer:
     
     def handle_client(self, client_socket, addr):
         """Handle communication with a connected client"""
+        client_id = None
+        buffer = ""  # Add a buffer for incoming data
+        
         try:
             # First message should be player registration
             data = client_socket.recv(BUFFER_SIZE)
@@ -111,52 +114,58 @@ class GameServer:
                 return
             
             # Register the player
-            player_info = json.loads(data.decode('utf-8'))
-            client_id = player_info.get('client_id', str(random.randint(1000, 9999)))
-            
-            # Assign player ID and starting position
-            x = random.randint(50, self.map_width - 50)
-            y = random.randint(50, self.map_height - 50)
-            color = player_info.get('color', (255, 0, 0))  # Default to red if not specified
-            
-            # Add player to the game
-            self.clients[client_id] = client_socket
-            self.players[client_id] = {
-                'id': client_id,
-                'x': x,
-                'y': y,
-                'color': color,
-                'health': 100,
-                'alive': True,
-                'has_cannon': False,
-                'cannon_id': None,
-                'speed': 5,
-                'dash_cooldown': 0
-            }
-            
-            # Send initial game state to client
-            initial_state = {
-                'type': 'init',
-                'client_id': client_id,
-                'map_width': self.map_width,
-                'map_height': self.map_height,
-                'obstacles': self.obstacles,
-                'players': self.players,
-                'cannons': self.cannons,
-                'projectiles': self.projectiles,
-                'powerups': self.powerups
-            }
-            client_socket.sendall(json.dumps(initial_state).encode('utf-8'))
-            
-            # Broadcast to all clients about new player
-            self.broadcast_game_update()
-            
-            # Start the game with just one player (instead of requiring two)
-            if not self.game_started:
-                self.game_started = True
-                self.broadcast_message('game_start', {'message': 'Game starting!'})
-                # Spawn the first cannon
-                self.spawn_cannon()
+            try:
+                player_info = json.loads(data.decode('utf-8'))
+                client_id = player_info.get('client_id', str(random.randint(1000, 9999)))
+                
+                # Assign player ID and starting position
+                x = random.randint(50, self.map_width - 50)
+                y = random.randint(50, self.map_height - 50)
+                color = player_info.get('color', (255, 0, 0))  # Default to red if not specified
+                
+                # Add player to the game
+                self.clients[client_id] = client_socket
+                self.players[client_id] = {
+                    'id': client_id,
+                    'x': x,
+                    'y': y,
+                    'color': color,
+                    'health': 100,
+                    'alive': True,
+                    'has_cannon': False,
+                    'cannon_id': None,
+                    'speed': 5,
+                    'dash_cooldown': 0
+                }
+                
+                # Send initial game state to client
+                initial_state = {
+                    'type': 'init',
+                    'data': {
+                        'client_id': client_id,
+                        'map_width': self.map_width,
+                        'map_height': self.map_height,
+                        'obstacles': self.obstacles,
+                        'players': self.players,
+                        'cannons': self.cannons,
+                        'projectiles': self.projectiles,
+                        'powerups': self.powerups
+                    }
+                }
+                client_socket.sendall(json.dumps(initial_state).encode('utf-8'))
+                
+                # Broadcast to all clients about new player
+                self.broadcast_game_update()
+                
+                # Start the game with just one player (instead of requiring two)
+                if not self.game_started:
+                    self.game_started = True
+                    self.broadcast_message('game_start', {'message': 'Game starting!'})
+                    # Spawn the first cannon
+                    self.spawn_cannon()
+            except json.JSONDecodeError as e:
+                print(f"Invalid JSON in registration: {e}")
+                return
             
             # Main client communication loop
             while self.running:
@@ -164,20 +173,68 @@ class GameServer:
                 if not data:
                     break
                 
-                # Parse and handle client message
-                try:
-                    message = json.loads(data.decode('utf-8'))
-                    self.handle_client_message(client_id, message)
-                except json.JSONDecodeError:
-                    print(f"Invalid JSON from client {client_id}")
-                except Exception as e:
-                    print(f"Error handling client message: {e}")
+                # Add received data to buffer
+                buffer += data.decode('utf-8')
+                
+                # Process complete messages in buffer
+                messages_processed = 0
+                while True:
+                    try:
+                        # Find start of a JSON object
+                        json_start = buffer.find('{')
+                        if json_start == -1:
+                            break  # No JSON start found
+                        
+                        # Find where the JSON object ends
+                        depth = 0
+                        json_end = -1
+                        for i in range(json_start, len(buffer)):
+                            if buffer[i] == '{':
+                                depth += 1
+                            elif buffer[i] == '}':
+                                depth -= 1
+                                if depth == 0:
+                                    json_end = i
+                                    break
+                        
+                        if json_end == -1:
+                            break  # Incomplete JSON object
+                        
+                        # Parse and process the complete JSON message
+                        message_json = buffer[json_start:json_end+1]
+                        message = json.loads(message_json)
+                        self.handle_client_message(client_id, message)
+                        
+                        # Remove the processed message from buffer
+                        buffer = buffer[json_end+1:]
+                        messages_processed += 1
+                        
+                    except json.JSONDecodeError as e:
+                        # Skip invalid JSON by finding the next opening brace
+                        next_start = buffer.find('{', json_start + 1)
+                        if next_start == -1:
+                            buffer = ""  # Clear buffer if no valid JSON found
+                        else:
+                            buffer = buffer[next_start:]  # Start from next JSON object
+                        print(f"Invalid JSON from client {client_id}: {e}")
+                    except Exception as e:
+                        print(f"Error processing message: {e}")
+                        buffer = ""  # Clear buffer on error
+                        break
+                
+                if messages_processed == 0 and len(buffer) > BUFFER_SIZE * 2:
+                    # If buffer is too large without valid messages, clear it
+                    print(f"Buffer overflow from client {client_id}, clearing")
+                    buffer = ""
         
+        except ConnectionError:
+            print(f"Connection error with client {client_id}")
         except Exception as e:
             print(f"Client handler error: {e}")
         finally:
             # Clean up when client disconnects
-            self.handle_disconnect(client_id)
+            if client_id:
+                self.handle_disconnect(client_id)
     
     def handle_client_message(self, client_id, message):
         """Process messages from clients"""

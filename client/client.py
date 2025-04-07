@@ -255,41 +255,17 @@ class GameClient:
             
             # Update players
             for player_id, player_data in data.get('players', {}).items():
+                # Ensure nickname is passed when creating Player instances for other players
                 if player_id not in self.players:
                     color = tuple(player_data['color']) if isinstance(player_data['color'], list) else player_data['color']
-                    self.players[player_id] = Player(player_data['x'], player_data['y'], color, player_id)
+                    nickname = player_data.get('nickname', f"Player_{player_id}")  # Default to Player_<id> if nickname is missing
+                    self.players[player_id] = Player(player_data['x'], player_data['y'], color, player_id, nickname)
                     if player_id == self.client_id:
                         self.local_player = self.players[player_id]
                 else:
-                    # Only update other players from server data
-                    # For local player, we handle movement locally for responsiveness
+                    # Update existing player instance
                     if player_id != self.client_id:
-                        # For remote players, store their current position for interpolation
-                        if hasattr(self.players[player_id], 'x') and hasattr(self.players[player_id], 'y'):
-                            self.players[player_id].prev_x = self.players[player_id].x
-                            self.players[player_id].prev_y = self.players[player_id].y
-                            self.players[player_id].interp_start_time = time.time()
-                        else:
-                            # First update, no interpolation needed
-                            self.players[player_id].prev_x = player_data['x']
-                            self.players[player_id].prev_y = player_data['y']
-                            self.players[player_id].interp_start_time = time.time()
-                            
-                        # Set target position from server
-                        self.players[player_id].target_x = player_data['x']
-                        self.players[player_id].target_y = player_data['y']
-                        
-                        # Update other properties immediately
-                        player_copy = player_data.copy()
-                        if 'x' in player_copy: del player_copy['x']
-                        if 'y' in player_copy: del player_copy['y']
-                        self.players[player_id].update(player_copy)
-                    else:
-                        # For local player, only update non-position properties
-                        local_data = player_data.copy()
-                        if 'x' in local_data: del local_data['x']
-                        if 'y' in local_data: del local_data['y']
-                        self.local_player.update(local_data)
+                        self.players[player_id].update(player_data)
             
             # Update cannons
             current_cannons = set()

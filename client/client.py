@@ -201,8 +201,10 @@ class GameClient:
             for player_id, player_data in data.get('players', {}).items():
                 if player_id not in self.players:
                     color = tuple(player_data['color']) if isinstance(player_data['color'], list) else player_data['color']
-                    nickname = self.show_nickname_modal() if player_id == self.client_id else None
-                    self.players[player_id] = Player(player_data['x'], player_data['y'], color, player_id, nickname)
+                    self.players[player_id] = Player(player_data['x'], player_data['y'], color, player_id)
+                    if player_id == self.client_id:
+                        self.local_player = self.players[player_id]
+                        print(f"LOCAL PLAYER SET: id={player_id}, pos=({self.local_player.x}, {self.local_player.y})")
                 else:
                     self.players[player_id].update(player_data)
             
@@ -811,42 +813,6 @@ class GameClient:
         # Clean up
         self.disconnect()
         pygame.quit()
-
-    def show_nickname_modal(self):
-        """Display a modal to input the player's nickname."""
-        nickname = None
-        input_active = True
-        input_box = pygame.Rect(WINDOW_WIDTH // 2 - 100, WINDOW_HEIGHT // 2 - 20, 200, 40)
-        color_inactive = pygame.Color('lightskyblue3')
-        color_active = pygame.Color('dodgerblue2')
-        color = color_inactive
-        text = ''
-        font = pygame.font.Font(None, 32)
-
-        while input_active:
-            for event in pygame.event.get():
-                if event.type == pygame.QUIT:
-                    pygame.quit()
-                    sys.exit()
-                if event.type == pygame.KEYDOWN:
-                    if event.key == pygame.K_RETURN:
-                        nickname = text
-                        input_active = False
-                    elif event.key == pygame.K_BACKSPACE:
-                        text = text[:-1]
-                    else:
-                        text += event.unicode
-
-            self.window.fill((0, 0, 0))
-            txt_surface = font.render(text, True, color)
-            width = max(200, txt_surface.get_width() + 10)
-            input_box.w = width
-            self.window.blit(txt_surface, (input_box.x + 5, input_box.y + 5))
-            pygame.draw.rect(self.window, color, input_box, 2)
-            pygame.display.flip()
-            self.clock.tick(30)
-
-        return nickname
 
 if __name__ == "__main__":
     # Get server address from command line args if provided

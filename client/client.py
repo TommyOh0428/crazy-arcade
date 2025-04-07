@@ -78,9 +78,8 @@ class GameClient:
         self.input_y = 0
         self.last_send_time = 0
         self.input_update_rate = 0.05  # 20 updates per second
-
-        # Add a cannon to the game
-        self.cannon = Cannon(WINDOW_WIDTH // 2, WINDOW_HEIGHT // 2)
+        
+        # No longer create a local cannon - we'll use server-synced cannons only
     
     def connect_to_server(self):
         """Connect to the game server"""
@@ -88,15 +87,26 @@ class GameClient:
             self.socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
             self.socket.connect((self.server_address, self.port))
             
+            # Generate a random client ID and remember it
+            self.client_id = f"player_{random.randint(1000, 9999)}"
+            
             # Generate a random color for this player
             color = (random.randint(100, 255), random.randint(100, 255), random.randint(100, 255))
             
             # Send player registration
             registration = {
-                'client_id': f"player_{random.randint(1000, 9999)}",
+                'client_id': self.client_id,  # Use our saved client_id
                 'color': color
             }
             self.socket.sendall(json.dumps(registration).encode('utf-8'))
+            
+            # PRE-CREATE our local player with the ID we've chosen
+            # This ensures we have a player to move regardless of server behavior
+            print(f"PRE-CREATING local player with ID: {self.client_id}")
+            x = random.randint(50, WINDOW_WIDTH - 50)
+            y = random.randint(50, WINDOW_HEIGHT - 50)
+            self.local_player = Player(x, y, color, self.client_id)
+            self.players[self.client_id] = self.local_player
             
             # Start listening for server messages
             self.connected = True
@@ -111,6 +121,8 @@ class GameClient:
     
     def receive_messages(self):
         """Listen for messages from the server"""
+        buffer = ""  # Buffer to accumulate incomplete messages
+        
         while self.connected:
             try:
                 data = self.socket.recv(BUFFER_SIZE)
@@ -118,13 +130,25 @@ class GameClient:
                     self.disconnect()
                     break
                 
-                try:
-                    message = json.loads(data.decode('utf-8'))
-                    self.handle_server_message(message)
-                except json.JSONDecodeError:
-                    print("Invalid JSON received from server")
-                except Exception as e:
-                    print(f"Error processing server message: {e}")
+                # Add received data to buffer
+                buffer += data.decode('utf-8')
+                
+                # Process complete messages in buffer
+                while True:
+                    try:
+                        # Try to parse a complete JSON message
+                        message, buffer = self.extract_json(buffer)
+                        if not message:
+                            break  # No complete message found
+                        
+                        # Process the message
+                        self.handle_server_message(message)
+                    except json.JSONDecodeError:
+                        # JSON parsing failed, might be incomplete
+                        break
+                    except Exception as e:
+                        print(f"Error processing server message: {e}")
+                        break
             
             except ConnectionError:
                 self.disconnect()
@@ -134,6 +158,28 @@ class GameClient:
                 self.disconnect()
                 break
     
+    def extract_json(self, buffer):
+        """Extract a complete JSON object from the buffer"""
+        try:
+            # Try to find a complete JSON object
+            json_start = buffer.find('{')
+            if json_start == -1:
+                return None, buffer  # No JSON start found
+            
+            # Parse the JSON from the start
+            parsed = json.loads(buffer[json_start:])
+            # If successful, remove the parsed portion from the buffer
+            return parsed, ""
+        except json.JSONDecodeError as e:
+            if e.pos > 0:
+                # If we have a partial object, try to find where it ends
+                try:
+                    obj = json.loads(buffer[json_start:json_start + e.pos])
+                    return obj, buffer[json_start + e.pos:]
+                except:
+                    pass
+            return None, buffer
+    
     def handle_server_message(self, message):
         """Process messages from the server"""
         msg_type = message.get('type')
@@ -142,6 +188,7 @@ class GameClient:
         if msg_type == 'init':
             # Initial game state
             self.client_id = data.get('client_id')
+            print(f"Received init message with client_id: {self.client_id}")
             
             # Process players
             for player_id, player_data in data.get('players', {}).items():
@@ -150,13 +197,36 @@ class GameClient:
                     self.players[player_id] = Player(player_data['x'], player_data['y'], color, player_id)
                     if player_id == self.client_id:
                         self.local_player = self.players[player_id]
+                        print(f"LOCAL PLAYER SET: id={player_id}, pos=({self.local_player.x}, {self.local_player.y})")
                 else:
                     self.players[player_id].update(player_data)
+            
+            # Check if local_player was set, if not this is a critical error
+            if not self.local_player and self.client_id:
+                print(f"CRITICAL ERROR: Local player not set despite having client_id={self.client_id}")
+                print(f"Available players: {list(self.players.keys())}")
+                
+                # Force create local player if it doesn't exist but should
+                if self.client_id not in self.players:
+                    print(f"Creating local player manually with client_id={self.client_id}")
+                    x = random.randint(50, WINDOW_WIDTH - 50)
+                    y = random.randint(50, WINDOW_HEIGHT - 50)
+                    color = (255, 0, 0)  # Bright red for visibility
+                    self.players[self.client_id] = Player(x, y, color, self.client_id)
+                    self.local_player = self.players[self.client_id]
+                    
+                    # Send this player to the server
+                    self.send_update()
             
             # Process obstacles
             for obstacle_data in data.get('obstacles', []):
                 self.obstacles.append(Obstacle(obstacle_data))
-        
+                
+            # Process initial cannons if any
+            for cannon_data in data.get('cannons', []):
+                cannon_id = cannon_data.get('id', 'unknown')
+                self.cannons[cannon_id] = Cannon(cannon_data)
+                
         elif msg_type == 'game_update':
             # Update game state
             
@@ -168,12 +238,21 @@ class GameClient:
                     if player_id == self.client_id:
                         self.local_player = self.players[player_id]
                 else:
-                    self.players[player_id].update(player_data)
+                    # Only update other players from server data
+                    # For local player, we handle movement locally for responsiveness
+                    if player_id != self.client_id:
+                        self.players[player_id].update(player_data)
+                    else:
+                        # For local player, only update non-position properties
+                        local_data = player_data.copy()
+                        if 'x' in local_data: del local_data['x']
+                        if 'y' in local_data: del local_data['y']
+                        self.local_player.update(local_data)
             
             # Update cannons
             current_cannons = set()
             for cannon_data in data.get('cannons', []):
-                cannon_id = cannon_data['id']
+                cannon_id = cannon_data.get('id', 'unknown')
                 current_cannons.add(cannon_id)
                 
                 if cannon_id not in self.cannons:
@@ -186,7 +265,7 @@ class GameClient:
                 if cannon_id not in current_cannons:
                     del self.cannons[cannon_id]
             
-            # Update projectiles
+            # Update projectiles, powerups and other state
             current_projectiles = set()
             for projectile_data in data.get('projectiles', []):
                 projectile_id = projectile_data['id']
@@ -229,9 +308,12 @@ class GameClient:
         elif msg_type == 'cannon_spawn':
             cannon_data = data.get('cannon')
             if cannon_data:
-                cannon_id = cannon_data['id']
-                self.cannons[cannon_id] = Cannon(cannon_data)
-                self.add_message(f"New {cannon_data['type']} cannon spawned!")
+                cannon_id = cannon_data.get('id', 'unknown')
+                try:
+                    self.cannons[cannon_id] = Cannon(cannon_data)
+                    self.add_message(f"New {cannon_data.get('type', 'unknown')} cannon spawned!")
+                except Exception as e:
+                    pass  # silently handle errors
         
         elif msg_type == 'cannon_pickup':
             cannon_id = data.get('cannon_id')
@@ -239,9 +321,16 @@ class GameClient:
             
             if cannon_id in self.cannons and player_id in self.players:
                 self.cannons[cannon_id].controlled_by = player_id
+                
+                # IMPORTANT: Explicitly set the has_cannon flag on the player
                 if player_id == self.client_id:
+                    print(f"DEBUG: You picked up cannon {cannon_id}")
+                    self.local_player.has_cannon = True
+                    self.local_player.cannon_id = cannon_id
                     self.add_message("You picked up a cannon!")
                 else:
+                    self.players[player_id].has_cannon = True
+                    self.players[player_id].cannon_id = cannon_id
                     self.add_message(f"Player grabbed a cannon!")
         
         elif msg_type == 'cannon_shot':
@@ -327,43 +416,21 @@ class GameClient:
         if not self.connected or not self.local_player or not self.local_player.alive:
             return
         
-        current_time = time.time()
-        if current_time - self.last_send_time < self.input_update_rate:
-            return  # Throttle updates
-        
-        # Calculate new position
-        player_x = self.local_player.x + self.input_x * self.local_player.speed
-        player_y = self.local_player.y + self.input_y * self.local_player.speed
-        
-        # Check for collisions with walls
-        player_x = max(PLAYER_RADIUS, min(WINDOW_WIDTH - PLAYER_RADIUS, player_x))
-        player_y = max(PLAYER_RADIUS, min(WINDOW_HEIGHT - PLAYER_RADIUS, player_y))
-        
-        # Check for collisions with obstacles
-        collision = False
-        for obstacle in self.obstacles:
-            if (obstacle.x - PLAYER_RADIUS <= player_x <= obstacle.x + obstacle.width + PLAYER_RADIUS and
-                obstacle.y - PLAYER_RADIUS <= player_y <= obstacle.y + obstacle.height + PLAYER_RADIUS):
-                collision = True
-                break
-        
-        if not collision and (self.input_x != 0 or self.input_y != 0):
-            # Send update to server
-            update = {
-                'type': 'player_update',
-                'data': {
-                    'x': player_x,
-                    'y': player_y,
-                    'dash_cooldown': self.local_player.dash_cooldown
-                }
+        # Send current position to server
+        update = {
+            'type': 'player_update',
+            'data': {
+                'x': self.local_player.x,
+                'y': self.local_player.y,
+                'dash_cooldown': self.local_player.dash_cooldown
             }
-            
-            try:
-                self.socket.sendall(json.dumps(update).encode('utf-8'))
-                self.last_send_time = current_time
-            except Exception as e:
-                print(f"Error sending update: {e}")
-                self.disconnect()
+        }
+        
+        try:
+            self.socket.sendall(json.dumps(update).encode('utf-8'))
+        except Exception as e:
+            print(f"Error sending update: {e}")
+            self.disconnect()
     
     def try_pickup_cannon(self):
         """Attempt to pick up a nearby cannon"""
@@ -394,9 +461,19 @@ class GameClient:
     
     def try_shoot_cannon(self, target_x, target_y):
         """Attempt to shoot with the equipped cannon"""
-        if (not self.connected or not self.local_player or 
-            not self.local_player.alive or not self.local_player.has_cannon):
+        if not self.connected or not self.local_player:
+            print("DEBUG: Cannot shoot - not connected or no local player")
             return
+            
+        if not self.local_player.alive:
+            print("DEBUG: Cannot shoot - player not alive")
+            return
+            
+        if not self.local_player.has_cannon:
+            print("DEBUG: Cannot shoot - player doesn't have a cannon")
+            return
+            
+        print(f"DEBUG: Sending shoot request to target ({target_x}, {target_y})")
         
         # Send shoot request to server
         message = {
@@ -407,6 +484,7 @@ class GameClient:
         
         try:
             self.socket.sendall(json.dumps(message).encode('utf-8'))
+            print("DEBUG: Shoot request sent successfully")
         except Exception as e:
             print(f"Error sending shoot request: {e}")
             self.disconnect()
@@ -446,45 +524,90 @@ class GameClient:
     
     def handle_input(self):
         """Handle user input"""
+        # Process one-time events
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
                 self.running = False
                 pygame.quit()
                 sys.exit()
             
-            # Mouse clicks for shooting
-            elif event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:  # Left click
-                mouse_x, mouse_y = pygame.mouse.get_pos()
-                self.try_shoot_cannon(mouse_x, mouse_y)
-            
-            # Space for dash
-            elif event.type == pygame.KEYDOWN and event.key == pygame.K_SPACE:
-                self.try_dash()
-                if self.cannon:
-                    self.cannon.shoot()
-            
             # E for picking up cannons
             elif event.type == pygame.KEYDOWN and event.key == pygame.K_e:
                 self.try_pickup_cannon()
+                
+            # Space to shoot cannon - changed from mouse click to key press
+            elif event.type == pygame.KEYDOWN and event.key == pygame.K_SPACE:
+                if self.local_player and self.local_player.has_cannon:
+                    # Get mouse position for aiming direction
+                    mouse_x, mouse_y = pygame.mouse.get_pos()
+                    self.try_shoot_cannon(mouse_x, mouse_y)
+                else:
+                    # If not holding cannon, use space for dash
+                    self.try_dash()
+                
+            # DEBUG: Force teleport player with T key
+            elif event.type == pygame.KEYDOWN and event.key == pygame.K_t and self.local_player:
+                self.local_player.x = 500
+                self.local_player.y = 500
+                print(f"DEBUG: Teleported player to (500, 500)")
+                self.send_update()
         
-        # Handle continuous movement inputs
-        keys = pygame.key.get_pressed()
-        self.input_x = 0
-        self.input_y = 0
+        # Check if local player exists
+        if not self.local_player:
+            print("WARNING: No local player to control")
+            return
         
-        if keys[K_LEFT] or keys[K_a]:
-            self.input_x = -1
-        if keys[K_RIGHT] or keys[K_d]:
-            self.input_x = 1
-        if keys[K_UP] or keys[K_w]:
-            self.input_y = -1
-        if keys[K_DOWN] or keys[K_s]:
-            self.input_y = 1
-        
-        # Normalize diagonal movement
-        if self.input_x != 0 and self.input_y != 0:
-            self.input_x *= 0.7071  # 1/sqrt(2)
-            self.input_y *= 0.7071
+        if not self.local_player.alive:
+            return
+
+        # Process continuous keyboard input - only if player doesn't have a cannon
+        if not self.local_player.has_cannon:
+            keys = pygame.key.get_pressed()
+            dx = 0
+            dy = 0
+            
+            if keys[K_LEFT] or keys[K_a]:
+                dx -= 1
+            if keys[K_RIGHT] or keys[K_d]:
+                dx += 1 
+            if keys[K_UP] or keys[K_w]:
+                dy -= 1
+            if keys[K_DOWN] or keys[K_s]:
+                dy += 1
+            
+            # Normalize diagonal movement
+            if dx != 0 and dy != 0:
+                dx *= 0.7071  # 1/sqrt(2)
+                dy *= 0.7071
+            
+            # Store input values for other functions to use
+            self.input_x = dx
+            self.input_y = dy
+            
+            # FORCE PLAYER MOVEMENT regardless of network conditions
+            if dx != 0 or dy != 0:
+                old_x = self.local_player.x
+                old_y = self.local_player.y
+                
+                # Force movement with speed factor
+                speed = self.local_player.speed
+                new_x = old_x + dx * speed
+                new_y = old_y + dy * speed
+                
+                # Wall collision - keep player within bounds
+                new_x = max(PLAYER_RADIUS, min(WINDOW_WIDTH - PLAYER_RADIUS, new_x))
+                new_y = max(PLAYER_RADIUS, min(WINDOW_HEIGHT - PLAYER_RADIUS, new_y))
+                
+                # Directly update player position
+                self.local_player.x = new_x
+                self.local_player.y = new_y
+                
+                # Send update to server
+                self.send_update()
+        else:
+            # Reset input values when player has a cannon (can't move)
+            self.input_x = 0
+            self.input_y = 0
     
     def draw(self):
         """Render the game state"""
@@ -499,11 +622,19 @@ class GameClient:
         for powerup_id, powerup in self.powerups.items():
             powerup.draw(self.window)
         
-        # Draw cannons
+        # Draw cannons - draw ALL cannons regardless of who controls them
         for cannon_id, cannon in self.cannons.items():
-            cannon.draw(self.window)
+            try:
+                # Draw the cannon as a bright yellow circle (easy to see)
+                pygame.draw.circle(self.window, (255, 255, 0), (int(cannon.x), int(cannon.y)), cannon.radius)
+                
+                # Draw a white outline around free cannons
+                if cannon.controlled_by is None:
+                    pygame.draw.circle(self.window, (255, 255, 255), (int(cannon.x), int(cannon.y)), cannon.radius + 2, 2)
+            except Exception as e:
+                print(f"Error drawing cannon {cannon_id}: {e}")
         
-        # Draw players
+        # Draw players (including local player for debugging)
         for player_id, player in self.players.items():
             player.draw(self.window)
         
@@ -511,42 +642,19 @@ class GameClient:
         for projectile_id, projectile in self.projectiles.items():
             projectile.draw(self.window)
         
-        # Ensure the local player is initialized for testing
-        if not self.local_player:
-            player_x = random.randint(PLAYER_RADIUS, WINDOW_WIDTH - PLAYER_RADIUS)
-            player_y = random.randint(PLAYER_RADIUS, WINDOW_HEIGHT - PLAYER_RADIUS)
-            self.local_player = Player(player_x, player_y, (255, 0, 0), "test_player")
-
-        # Draw the local player
-        if self.local_player:
-            self.local_player.draw(self.window)
-
-        # Ensure the cannon spawns separately and the player must reach it to equip
-        if not self.cannon:
-            cannon_x = random.randint(PLAYER_RADIUS, WINDOW_WIDTH - PLAYER_RADIUS)
-            cannon_y = random.randint(PLAYER_RADIUS, WINDOW_HEIGHT - PLAYER_RADIUS)
-            self.cannon = Cannon(cannon_x, cannon_y)
-
-        if self.cannon:
-            self.cannon.draw(self.window)
-
-        # Check if the player is near the cannon to equip it
-        if self.local_player and not self.local_player.has_cannon and self.cannon:
-            dx = self.local_player.x - self.cannon.x
-            dy = self.local_player.y - self.cannon.y
-            distance = math.sqrt(dx**2 + dy**2)
-
-            if distance < PLAYER_RADIUS + self.cannon.radius:
-                self.local_player.has_cannon = True
-                self.add_message("You equipped the cannon!")
-
-        # If the player has the cannon, update cannon position to follow the player
+        # Draw aiming crosshair when player has a cannon
         if self.local_player and self.local_player.has_cannon:
-            self.cannon.x = self.local_player.x
-            self.cannon.y = self.local_player.y
-
-            # Draw the cannon instead of the player
-            self.cannon.draw(self.window)
+            # Draw aiming line from the player's position to the mouse position
+            mouse_x, mouse_y = pygame.mouse.get_pos()
+            player_x, player_y = int(self.local_player.x), int(self.local_player.y)
+            
+            # Draw a line from player to mouse cursor
+            pygame.draw.line(self.window, (255, 255, 255), (player_x, player_y), (mouse_x, mouse_y), 2)
+            
+            # Draw crosshair at mouse position for aiming
+            pygame.draw.circle(self.window, (255, 0, 0), (mouse_x, mouse_y), 10, 2)
+            pygame.draw.line(self.window, (255, 0, 0), (mouse_x - 15, mouse_y), (mouse_x + 15, mouse_y), 2)
+            pygame.draw.line(self.window, (255, 0, 0), (mouse_x, mouse_y - 15), (mouse_x, mouse_y + 15), 2)
         
         # Draw UI elements
         if self.sudden_death:
@@ -569,8 +677,8 @@ class GameClient:
             text = self.small_font.render(f"Ping: {self.latency_ms} ms", True, WHITE)
             self.window.blit(text, (10, 30))
         
-        # Draw controls help
-        text = self.small_font.render("WASD: Move | E: Pick up cannon | SPACE: Dash | Click: Shoot", True, WHITE)
+        # Draw controls help - updated to reflect the new Space key shooting
+        text = self.small_font.render("WASD: Move | E: Pick up cannon | SPACE: Shoot/Dash", True, WHITE)
         self.window.blit(text, (WINDOW_WIDTH//2 - text.get_width()//2, WINDOW_HEIGHT - 30))
         
         # Draw messages
@@ -606,44 +714,23 @@ class GameClient:
         # Update messages
         self.update_messages()
         
-        # Update player if we're still playing
-        if self.connected and self.local_player and self.local_player.alive:
-            # Update dash cooldown
-            if self.local_player.dash_cooldown > 0:
-                self.local_player.dash_cooldown = max(0, self.local_player.dash_cooldown - delta_time)
-            
-            # Send position updates to server
-            self.send_update()
-
-        # Simplify game logic to focus on player loading and movement
-        if self.local_player and self.local_player.alive:
-            self.local_player.x += self.input_x * self.local_player.speed
-            self.local_player.y += self.input_y * self.local_player.speed
-
-            # Ensure the player stays within the window bounds
-            self.local_player.x = max(PLAYER_RADIUS, min(WINDOW_WIDTH - PLAYER_RADIUS, self.local_player.x))
-            self.local_player.y = max(PLAYER_RADIUS, min(WINDOW_HEIGHT - PLAYER_RADIUS, self.local_player.y))
-
+        # Update dash cooldown
+        if self.local_player and self.local_player.alive and self.local_player.dash_cooldown > 0:
+            self.local_player.dash_cooldown = max(0, self.local_player.dash_cooldown - delta_time)
+        
+        # Send periodic ping for latency measurement
         current_time = time.time()
-        if current_time - self.last_ping_time > self.ping_interval:
+        if self.connected and current_time - self.last_ping_time > self.ping_interval:
             self.last_ping_time = current_time
             self.ping_sent_time = current_time
             try:
                 self.socket.sendall(json.dumps({'type': 'ping'}).encode('utf-8'))
             except Exception as e:
-                print(f"Error sending ping: {e}")
-
-        # Start sudden death timer countdown
-        if self.sudden_death_timer > 0:
-            self.sudden_death_timer -= delta_time
-
-        # Ensure sudden death mode activates when timer reaches zero
-        if self.sudden_death_timer <= 0 and not self.sudden_death:
-            self.sudden_death = True
-
-        # Update the cannon
-        if self.cannon:
-            self.cannon.update()  # Pass an empty dictionary if no data is available
+                pass  # Silently handle ping errors
+        
+        # Update cannon objects
+        for cannon_id, cannon in self.cannons.items():
+            cannon.update()
     
     def disconnect(self):
         """Disconnect from the server"""

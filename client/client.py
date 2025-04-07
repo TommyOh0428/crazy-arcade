@@ -12,6 +12,8 @@ from cannon import Cannon
 from projectile import Projectile
 from obstacle import Obstacle
 from powerup import PowerUp
+import tkinter as tk
+from tkinter import simpledialog
 
 # Game constants
 WINDOW_WIDTH = 1000
@@ -32,6 +34,15 @@ YELLOW = (255, 255, 0)
 DEFAULT_SERVER = "127.0.0.1"
 DEFAULT_PORT = 5555
 BUFFER_SIZE = 4096
+
+# Prompt user for nickname using a modal dialog
+def get_nickname():
+    root = tk.Tk()
+    root.withdraw()  # Hide the main tkinter window
+    nickname = simpledialog.askstring("Nickname", "Enter your nickname:")
+    if not nickname:
+        nickname = "Guest"  # Fallback if user cancels or leaves it blank
+    return nickname
 
 class GameClient:
     def __init__(self, server_address=DEFAULT_SERVER, port=DEFAULT_PORT):
@@ -93,9 +104,13 @@ class GameClient:
             # Generate a random color for this player
             color = (random.randint(100, 255), random.randint(100, 255), random.randint(100, 255))
             
+            # Prompt user for nickname
+            nickname = get_nickname()
+            
             # Send player registration
             registration = {
                 'client_id': self.client_id,  # Use our saved client_id
+                'nickname': nickname,
                 'color': color
             }
             self.socket.sendall(json.dumps(registration).encode('utf-8'))
@@ -105,7 +120,8 @@ class GameClient:
             print(f"PRE-CREATING local player with ID: {self.client_id}")
             x = random.randint(50, WINDOW_WIDTH - 50)
             y = random.randint(50, WINDOW_HEIGHT - 50)
-            self.local_player = Player(x, y, color, self.client_id)
+            # Pass the nickname dynamically to the Player instance
+            self.local_player = Player(x, y, color, self.client_id, nickname)
             self.players[self.client_id] = self.local_player
             
             # Start listening for server messages

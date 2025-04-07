@@ -499,25 +499,9 @@ class GameServer:
                     # Remove projectile
                     self.projectiles.remove(projectile)
                     continue
-            
-            # Check for collisions with obstacles
-            for obstacle in self.obstacles:
-                ox, oy = obstacle['x'], obstacle['y']
-                ow, oh = obstacle['width'], obstacle['height']
-                
-                # Simple collision check
-                if (ox - projectile['radius'] <= x <= ox + ow + projectile['radius'] and 
-                    oy - projectile['radius'] <= y <= oy + oh + projectile['radius']):
-                    if projectile['can_bounce'] and projectile['bounces'] > 0:
-                        # Simple bounce - reverse direction
-                        projectile['dx'] = -projectile['dx']
-                        projectile['dy'] = -projectile['dy']
-                        projectile['bounces'] -= 1
-                    else:
-                        # Remove projectile
-                        if projectile in self.projectiles:
-                            self.projectiles.remove(projectile)
-                        break
+              # Check for collisions with obstacles - DISABLED
+            # Projectiles now ignore obstacles and pass through them
+            # Keeping this comment block to document the change
             
             # Check for collisions with players
             for player_id, player in self.players.items():

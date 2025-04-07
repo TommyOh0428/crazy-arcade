@@ -241,7 +241,8 @@ class GameClient:
                     # Send this player to the server
                     self.send_update()
             
-            # Process obstacles
+            # Clear existing obstacles before appending new ones
+            self.obstacles.clear()
             for obstacle_data in data.get('obstacles', []):
                 self.obstacles.append(Obstacle(obstacle_data))
                 

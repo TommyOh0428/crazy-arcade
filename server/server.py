@@ -422,9 +422,9 @@ class GameServer:
                 
                 # Set properties based on type - increasing speeds significantly
                 properties = {
-                    'RAPID': {'damage': 10, 'speed': 40, 'cooldown': 0.3, 'shots': 10, 'radius': 5, 'color': (255, 0, 0)},
-                    'EXPLOSIVE': {'damage': 30, 'speed': 25, 'cooldown': 1.0, 'shots': 3, 'radius': 15, 'color': (255, 255, 0)},
-                    'BOUNCING': {'damage': 15, 'speed': 35, 'cooldown': 0.7, 'shots': 5, 'radius': 8, 'color': (0, 255, 0)}
+                    'RAPID': {'damage': 10, 'speed': 350, 'cooldown': 0.3, 'shots': 10, 'radius': 5, 'color': (255, 0, 0)},
+                    'EXPLOSIVE': {'damage': 30, 'speed': 250, 'cooldown': 1.0, 'shots': 3, 'radius': 15, 'color': (255, 255, 0)},
+                    'BOUNCING': {'damage': 15, 'speed': 200, 'cooldown': 0.7, 'shots': 5, 'radius': 8, 'color': (0, 255, 0)}
                 }
                 
                 # Create the cannon

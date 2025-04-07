@@ -117,6 +117,7 @@ class GameServer:
             try:
                 player_info = json.loads(data.decode('utf-8'))
                 client_id = player_info.get('client_id', str(random.randint(1000, 9999)))
+                nickname = player_info.get('nickname', f'Player{client_id}')  # Default nickname if not specified
                 
                 # Assign player ID and starting position
                 x = random.randint(50, self.map_width - 50)
@@ -125,8 +126,10 @@ class GameServer:
                 
                 # Add player to the game
                 self.clients[client_id] = client_socket
+                # Ensure the nickname is sent to all clients in the game state
                 self.players[client_id] = {
                     'id': client_id,
+                    'nickname': nickname,  # Include nickname in the player state
                     'x': x,
                     'y': y,
                     'color': color,

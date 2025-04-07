@@ -620,6 +620,14 @@ class GameClient:
         for projectile_id, projectile in self.projectiles.items():
             projectile.draw(self.window)
         
+        # Ensure the local player is initialized for testing
+        if not self.local_player:
+            self.local_player = Player(WINDOW_WIDTH // 2, WINDOW_HEIGHT // 2, (255, 0, 0), "test_player")
+
+        # Draw the local player
+        if self.local_player:
+            self.local_player.draw(self.window)
+        
         # Draw UI elements
         if self.sudden_death:
             text = self.font.render("SUDDEN DEATH", True, RED)
@@ -687,6 +695,15 @@ class GameClient:
             # Send position updates to server
             self.send_update()
 
+        # Simplify game logic to focus on player loading and movement
+        if self.local_player and self.local_player.alive:
+            self.local_player.x += self.input_x * self.local_player.speed
+            self.local_player.y += self.input_y * self.local_player.speed
+
+            # Ensure the player stays within the window bounds
+            self.local_player.x = max(PLAYER_RADIUS, min(WINDOW_WIDTH - PLAYER_RADIUS, self.local_player.x))
+            self.local_player.y = max(PLAYER_RADIUS, min(WINDOW_HEIGHT - PLAYER_RADIUS, self.local_player.y))
+
         current_time = time.time()
         if current_time - self.last_ping_time > self.ping_interval:
             self.last_ping_time = current_time
@@ -695,6 +712,14 @@ class GameClient:
                 self.socket.sendall(json.dumps({'type': 'ping'}).encode('utf-8'))
             except Exception as e:
                 print(f"Error sending ping: {e}")
+
+        # Start sudden death timer countdown
+        if self.sudden_death_timer > 0:
+            self.sudden_death_timer -= delta_time
+
+        # Ensure sudden death mode activates when timer reaches zero
+        if self.sudden_death_timer <= 0 and not self.sudden_death:
+            self.sudden_death = True
     
     def disconnect(self):
         """Disconnect from the server"""

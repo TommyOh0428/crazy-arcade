@@ -10,7 +10,7 @@ PLAYER_RADIUS = 20
 PLAYER_MAX_HEALTH = 100
 
 class Player:
-    def __init__(self, x, y, color, player_id):
+    def __init__(self, x, y, color, player_id, nickname=None):
         self.x = x
         self.y = y
         self.color = color
@@ -23,6 +23,7 @@ class Player:
         self.has_cannon = False
         self.cannon_id = None
         self.dash_direction = (0, 0)
+        self.nickname = nickname if nickname else f"Player {player_id}"
     
     def update(self, data):
         """Update player state from server data"""
@@ -50,3 +51,9 @@ class Player:
         health_width = 40 * (self.health / PLAYER_MAX_HEALTH)
         pygame.draw.rect(surface, RED, (self.x - 20, self.y - 30, 40, 5))
         pygame.draw.rect(surface, GREEN, (self.x - 20, self.y - 30, health_width, 5))
+        
+        # Draw nickname above the player
+        if self.nickname:
+            font = pygame.font.SysFont(None, 24)
+            text = font.render(self.nickname, True, (255, 255, 255))
+            surface.blit(text, (int(self.x) - text.get_width() // 2, int(self.y) - PLAYER_RADIUS - 20))

@@ -41,6 +41,10 @@ class GameServer:
         self.sudden_death = False
         self.sudden_death_timer = 120  # 2 minutes
         
+        # Auto-termination for empty server
+        self.empty_server_start_time = None
+        self.empty_server_timeout = 30  # Terminate after 30 seconds of inactivity
+        
         # Generate map obstacles
         self.generate_obstacles()
     
@@ -74,16 +78,26 @@ class GameServer:
         update_thread.daemon = True
         update_thread.start()
         
+        # Set socket timeout to allow checking for server termination
+        self.socket.settimeout(1.0)  # 1 second timeout
+        
         # Accept client connections
         try:
             while self.running:
-                client_socket, addr = self.socket.accept()
-                print(f"New connection from {addr}")
-                
-                # Start a thread to handle this client
-                client_thread = threading.Thread(target=self.handle_client, args=(client_socket, addr))
-                client_thread.daemon = True
-                client_thread.start()
+                try:
+                    client_socket, addr = self.socket.accept()
+                    print(f"New connection from {addr}")
+                    
+                    # Start a thread to handle this client
+                    client_thread = threading.Thread(target=self.handle_client, args=(client_socket, addr))
+                    client_thread.daemon = True
+                    client_thread.start()
+                except socket.timeout:
+                    # Timeout allows checking if we should still be running
+                    continue
+                except Exception as e:
+                    if self.running:  # Only print errors if we're supposed to be running
+                        print(f"Socket accept error: {e}")
         except Exception as e:
             print(f"Server error: {e}")
         finally:
@@ -671,6 +685,19 @@ class GameServer:
                     self.broadcast_game_update()
                 
                 last_update_time = current_time
+            
+            # Check for server termination due to inactivity
+            if not self.clients and self.empty_server_start_time is None:
+                # Server just became empty, start the timer
+                self.empty_server_start_time = current_time
+                print(f"No players connected. Server will terminate in {self.empty_server_timeout} seconds if no one joins.")
+            elif self.clients:
+                # Reset timer if any clients are connected
+                self.empty_server_start_time = None
+            elif self.empty_server_start_time and (current_time - self.empty_server_start_time) >= self.empty_server_timeout:
+                print(f"Server terminating after {self.empty_server_timeout} seconds with no players connected.")
+                self.running = False
+                break  # Exit the loop immediately
             
             # Sleep to avoid consuming too much CPU
             time.sleep(0.01)

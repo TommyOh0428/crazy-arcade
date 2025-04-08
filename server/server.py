@@ -149,7 +149,6 @@ class GameServer:
                     'has_cannon': False,
                     'cannon_id': None,
                     'speed': 5,
-                    'dash_cooldown': 0
                 }
                 
                 # Send initial game state to client
@@ -267,10 +266,6 @@ class GameServer:
                     # Apply the update if it's valid
                     self.players[client_id]['x'] = new_x
                     self.players[client_id]['y'] = new_y
-                
-                # Update other player properties
-                if 'dash_cooldown' in player_data:
-                    self.players[client_id]['dash_cooldown'] = player_data['dash_cooldown']
         
         elif msg_type == 'cannon_pickup':
             # Player is trying to pick up a cannon
@@ -282,12 +277,6 @@ class GameServer:
             target_x = message.get('target_x')
             target_y = message.get('target_y')
             self.handle_cannon_shoot(client_id, target_x, target_y)
-        
-        elif msg_type == 'dash':
-            # Player is using dash ability
-            dx = message.get('dx', 0)
-            dy = message.get('dy', 0)
-            self.handle_player_dash(client_id, dx, dy)
 
         elif msg_type == 'ping':
             self.send_message_to_client(client_id, 'pong', {})
@@ -393,24 +382,6 @@ class GameServer:
             # Broadcast the shot
             self.broadcast_message('cannon_shot', {
                 'projectile': projectile
-            })
-    
-    def handle_player_dash(self, client_id, dx, dy):
-        """Handle a player using dash ability"""
-        player = self.players.get(client_id)
-        if not player or not player['alive']:
-            return
-        
-        # Check if dash is on cooldown
-        if player['dash_cooldown'] <= 0:
-            # Apply dash
-            player['dash_cooldown'] = 2  # 2 seconds cooldown
-            
-            # Broadcast dash effect
-            self.broadcast_message('player_dash', {
-                'player_id': client_id,
-                'dx': dx,
-                'dy': dy
             })
     
     def spawn_cannon(self):

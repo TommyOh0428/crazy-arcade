@@ -17,12 +17,9 @@ class Player:
         self.id = player_id
         self.health = PLAYER_MAX_HEALTH
         self.speed = 5
-        self.dash_cooldown = 0
-        self.is_dashing = False
         self.alive = True
         self.has_cannon = False
         self.cannon_id = None
-        self.dash_direction = (0, 0)
     
     def update(self, data):
         """Update player state from server data"""
@@ -38,8 +35,6 @@ class Player:
             self.has_cannon = data['has_cannon']
         if 'cannon_id' in data:
             self.cannon_id = data['cannon_id']
-        if 'dash_cooldown' in data:
-            self.dash_cooldown = data['dash_cooldown']
     
     def draw(self, surface):
         if not self.alive:

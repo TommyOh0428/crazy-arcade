@@ -448,7 +448,6 @@ class GameClient:
             'data': {
                 'x': self.local_player.x,
                 'y': self.local_player.y,
-                'dash_cooldown': self.local_player.dash_cooldown
             }
         }
         
@@ -514,28 +513,7 @@ class GameClient:
         except Exception as e:
             print(f"Error sending shoot request: {e}")
             self.disconnect()
-    
-    def try_dash(self):
-        """Attempt to use dash ability"""
-        if (not self.connected or not self.local_player or 
-            not self.local_player.alive or self.local_player.dash_cooldown > 0 or
-            (self.input_x == 0 and self.input_y == 0)):
-            return
-        
-        # Send dash request to server
-        message = {
-            'type': 'dash',
-            'dx': self.input_x,
-            'dy': self.input_y
-        }
-        
-        try:
-            self.socket.sendall(json.dumps(message).encode('utf-8'))
-            self.local_player.dash_cooldown = 2  # Local prediction
-        except Exception as e:
-            print(f"Error sending dash request: {e}")
-            self.disconnect()
-    
+
     def add_message(self, text):
         """Add a message to the message queue"""
         self.messages.append({
@@ -567,9 +545,6 @@ class GameClient:
                     # Get mouse position for aiming direction
                     mouse_x, mouse_y = pygame.mouse.get_pos()
                     self.try_shoot_cannon(mouse_x, mouse_y)
-                else:
-                    # If not holding cannon, use space for dash
-                    self.try_dash()
                 
             # DEBUG: Force teleport player with T key
             elif event.type == pygame.KEYDOWN and event.key == pygame.K_t and self.local_player:
@@ -704,7 +679,7 @@ class GameClient:
             self.window.blit(text, (10, 30))
         
         # Draw controls help - updated to reflect the new Space key shooting
-        text = self.small_font.render("WASD: Move | E: Pick up cannon | SPACE: Shoot/Dash", True, WHITE)
+        text = self.small_font.render("WASD: Move | E: Pick up cannon | SPACE: Shoot", True, WHITE)
         self.window.blit(text, (WINDOW_WIDTH//2 - text.get_width()//2, WINDOW_HEIGHT - 30))
         
         # Draw messages
@@ -739,10 +714,6 @@ class GameClient:
         
         # Update messages
         self.update_messages()
-        
-        # Update dash cooldown
-        if self.local_player and self.local_player.alive and self.local_player.dash_cooldown > 0:
-            self.local_player.dash_cooldown = max(0, self.local_player.dash_cooldown - delta_time)
         
         # Interpolate positions for other players to reduce jitter
         current_time = time.time()

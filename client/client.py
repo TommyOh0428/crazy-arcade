@@ -389,7 +389,6 @@ class GameClient:
             if powerup_data:
                 powerup_id = powerup_data['id']
                 self.powerups[powerup_id] = PowerUp(powerup_data)
-        
         elif msg_type == 'powerup_pickup':
             powerup_id = data.get('powerup_id')
             player_id = data.get('player_id')
@@ -400,7 +399,12 @@ class GameClient:
                     if powerup_type == 'HEALTH':
                         self.add_message("You picked up a health boost!")
                     elif powerup_type == 'SPEED':
-                        self.add_message("You picked up a speed boost!")
+                        self.local_player.apply_speed_boost()
+                        self.add_message("You picked up a speed boost! Moving 1.5x faster for 10 seconds!")
+                else:
+                    # Apply speed boost to other players too so their movement is consistent
+                    if powerup_type == 'SPEED':
+                        self.players[player_id].apply_speed_boost()
                 
                 # Remove powerup
                 if powerup_id in self.powerups:

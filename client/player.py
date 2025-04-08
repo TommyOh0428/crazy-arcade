@@ -6,6 +6,7 @@ import time
 RED = (255, 0, 0)
 GREEN = (0, 255, 0)
 YELLOW = (255, 255, 0)
+WHITE = (255, 255, 255)
 
 # Constants
 PLAYER_RADIUS = 20
@@ -14,11 +15,12 @@ PLAYER_NORMAL_SPEED = 5
 PLAYER_BOOST_SPEED = 7.5  # 1.5x normal speed
 
 class Player:
-    def __init__(self, x, y, color, player_id):
+    def __init__(self, x, y, color, player_id, name="Player"):
         self.x = x
         self.y = y
         self.color = color
         self.id = player_id
+        self.name = name  # Added name attribute
         self.health = PLAYER_MAX_HEALTH
         self.speed = PLAYER_NORMAL_SPEED
         self.alive = True
@@ -27,6 +29,7 @@ class Player:
         self.speed_boosted = False
         self.speed_boost_end_time = 0
         self.boost_particles = []
+        self.font = pygame.font.SysFont(None, 24)  # Font for player name
     
     def update(self, data):
         """Update player state from server data"""
@@ -42,6 +45,8 @@ class Player:
             self.has_cannon = data['has_cannon']
         if 'cannon_id' in data:
             self.cannon_id = data['cannon_id']
+        if 'name' in data:
+            self.name = data['name']
         
         # Check for speed boost timeout
         current_time = time.time()
@@ -61,6 +66,11 @@ class Player:
         
         # Draw player
         pygame.draw.circle(surface, self.color, (int(self.x), int(self.y)), PLAYER_RADIUS)
+        
+        # Draw name above health bar
+        name_text = self.font.render(self.name, True, WHITE)
+        name_width = name_text.get_width()
+        surface.blit(name_text, (self.x - name_width // 2, self.y - 50))
         
         # Draw health bar
         health_width = 40 * (self.health / PLAYER_MAX_HEALTH)

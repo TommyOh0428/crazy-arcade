@@ -33,6 +33,72 @@ DEFAULT_SERVER = "127.0.0.1"
 DEFAULT_PORT = 5555
 BUFFER_SIZE = 4096
 
+class TextInput:
+    """A simple text input handler for pygame"""
+    def __init__(self, font=None, max_length=20, font_color=WHITE, antialias=True):
+        self.font = font if font else pygame.font.SysFont(None, 32)
+        self.text = ""
+        self.max_length = max_length
+        self.font_color = font_color
+        self.antialias = antialias
+        self.active = True
+        self.surface = None
+        self.cursor_visible = True
+        self.cursor_timer = 0
+        self.cursor_blink_interval = 0.5  # seconds
+        self.update_surface()
+    
+    def update(self, events, dt):
+        for event in events:
+            if event.type == KEYDOWN and self.active:
+                if event.key == K_BACKSPACE:
+                    self.text = self.text[:-1]
+                elif event.key == K_RETURN:
+                    return True  # Signal that Enter was pressed
+                elif len(self.text) < self.max_length and event.unicode.isprintable():
+                    self.text += event.unicode
+                
+                self.update_surface()
+        
+        # Blink cursor
+        self.cursor_timer += dt
+        if self.cursor_timer >= self.cursor_blink_interval:
+            self.cursor_timer = 0
+            self.cursor_visible = not self.cursor_visible
+            self.update_surface()
+                
+        return False
+    
+    def update_surface(self):
+        base_text = self.font.render(self.text, self.antialias, self.font_color)
+        
+        if self.cursor_visible and self.active:
+            # Add cursor at the end of text
+            cursor_pos = self.font.size(self.text)[0]
+            cursor_height = self.font.get_height()
+            
+            # Create surface with room for cursor
+            width = max(base_text.get_width() + 2, cursor_pos + 2)
+            self.surface = pygame.Surface((width, cursor_height), pygame.SRCALPHA)
+            self.surface.blit(base_text, (0, 0))
+            
+            # Add cursor
+            pygame.draw.line(
+                self.surface, 
+                self.font_color, 
+                (cursor_pos, 2), 
+                (cursor_pos, cursor_height - 2), 
+                2
+            )
+        else:
+            self.surface = base_text
+        
+    def get_surface(self):
+        return self.surface
+    
+    def get_text(self):
+        return self.text
+
 class GameClient:
     def __init__(self, server_address=DEFAULT_SERVER, port=DEFAULT_PORT):
         self.last_ping_time = 0
@@ -53,6 +119,7 @@ class GameClient:
         self.socket = None
         self.connected = False
         self.client_id = None
+        self.player_name = self.get_player_name()  # Get player name before connecting
         
         # Game state
         self.players = {}
@@ -81,6 +148,62 @@ class GameClient:
         
         # No longer create a local cannon - we'll use server-synced cannons only
     
+    def get_player_name(self):
+        """Display a text input dialog to get the player name"""
+        text_input = TextInput(max_length=15)
+        background = pygame.Surface((WINDOW_WIDTH, WINDOW_HEIGHT))
+        background.fill(BLACK)
+        
+        title_font = pygame.font.SysFont(None, 48)
+        title_text = title_font.render("Enter Your Name:", True, WHITE)
+        title_rect = title_text.get_rect(center=(WINDOW_WIDTH//2, WINDOW_HEIGHT//2 - 60))
+        
+        instruction_font = pygame.font.SysFont(None, 24)
+        instruction_text = instruction_font.render("Press ENTER when done", True, WHITE)
+        instruction_rect = instruction_text.get_rect(center=(WINDOW_WIDTH//2, WINDOW_HEIGHT//2 + 40))
+        
+        name_entered = False
+        default_name = f"Player_{random.randint(100, 999)}"
+        
+        while not name_entered:
+            dt = self.clock.tick(30) / 1000.0  # Convert to seconds
+            
+            events = pygame.event.get()
+            for event in events:
+                if event.type == pygame.QUIT:
+                    pygame.quit()
+                    sys.exit()
+                if event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE:
+                    # Use default name if user presses escape
+                    return default_name
+            
+            # Update text input and check if Enter was pressed
+            if text_input.update(events, dt):
+                name = text_input.get_text().strip() or default_name
+                return name
+            
+            # Draw background
+            self.window.blit(background, (0, 0))
+            
+            # Draw title
+            self.window.blit(title_text, title_rect)
+            
+            # Draw text box
+            text_surface = text_input.get_surface()
+            text_rect = text_surface.get_rect(center=(WINDOW_WIDTH//2, WINDOW_HEIGHT//2))
+            
+            # Draw box around text input
+            input_box_rect = pygame.Rect(text_rect)
+            input_box_rect.inflate_ip(20, 10)
+            pygame.draw.rect(self.window, WHITE, input_box_rect, 2)
+            
+            self.window.blit(text_surface, text_rect)
+            self.window.blit(instruction_text, instruction_rect)
+            
+            pygame.display.update()
+        
+        return default_name
+    
     def connect_to_server(self):
         """Connect to the game server"""
         try:
@@ -96,7 +219,8 @@ class GameClient:
             # Send player registration
             registration = {
                 'client_id': self.client_id,  # Use our saved client_id
-                'color': color
+                'color': color,
+                'name': self.player_name      # Send player name with registration
             }
             self.socket.sendall(json.dumps(registration).encode('utf-8'))
             
@@ -105,7 +229,7 @@ class GameClient:
             print(f"PRE-CREATING local player with ID: {self.client_id}")
             x = random.randint(50, WINDOW_WIDTH - 50)
             y = random.randint(50, WINDOW_HEIGHT - 50)
-            self.local_player = Player(x, y, color, self.client_id)
+            self.local_player = Player(x, y, color, self.client_id, self.player_name)
             self.players[self.client_id] = self.local_player
             
             # Start listening for server messages
@@ -364,7 +488,7 @@ class GameClient:
             if projectile_data:
                 projectile_id = projectile_data['id']
                 self.projectiles[projectile_id] = Projectile(projectile_data)
-                
+
         elif msg_type == 'player_hit':
             player_id = data.get('player_id')
             damage = data.get('damage')

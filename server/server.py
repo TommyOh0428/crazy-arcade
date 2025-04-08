@@ -136,6 +136,7 @@ class GameServer:
                 x = random.randint(50, self.map_width - 50)
                 y = random.randint(50, self.map_height - 50)
                 color = player_info.get('color', (255, 0, 0))  # Default to red if not specified
+                name = player_info.get('name', f"Player_{random.randint(100, 999)}")  # Get player name or use default
                 
                 # Add player to the game
                 self.clients[client_id] = client_socket
@@ -144,6 +145,7 @@ class GameServer:
                     'x': x,
                     'y': y,
                     'color': color,
+                    'name': name,  # Store player name
                     'health': 100,
                     'alive': True,
                     'has_cannon': False,

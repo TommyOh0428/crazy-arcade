@@ -604,8 +604,8 @@ class GameClient:
                 new_y = old_y + dy * speed
                 
                 # Wall collision - keep player within bounds
-                new_x = max(PLAYER_RADIUS, min(WINDOW_WIDTH - PLAYER_RADIUS, new_x))
-                new_y = max(PLAYER_RADIUS, min(WINDOW_HEIGHT - PLAYER_RADIUS, new_y))
+                new_x = max(PLAYER_RADIUS+50, min(WINDOW_WIDTH-50 - PLAYER_RADIUS, new_x))
+                new_y = max(PLAYER_RADIUS+50, min(WINDOW_HEIGHT-50 - PLAYER_RADIUS, new_y))
                 
                 # Directly update player position
                 self.local_player.x = new_x

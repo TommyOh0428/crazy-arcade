@@ -469,12 +469,12 @@ class GameServer:
             
             # Check if out of bounds
             x, y = projectile['x'], projectile['y']
-            if x < 0 or x > self.map_width or y < 0 or y > self.map_height:
+            if x < 50 or x > self.map_width-50 or y < 50 or y > self.map_height-50:
                 if projectile['can_bounce'] and projectile['bounces'] > 0:
                     # Bounce off walls
-                    if x < 0 or x > self.map_width:
+                    if x < 50 or x > self.map_width-50:
                         projectile['dx'] = -projectile['dx']
-                    if y < 0 or y > self.map_height:
+                    if y < 50 or y > self.map_height-50:
                         projectile['dy'] = -projectile['dy']
                     projectile['bounces'] -= 1
                     # Adjust position to be within bounds

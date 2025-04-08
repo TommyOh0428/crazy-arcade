@@ -573,8 +573,7 @@ class GameServer:
                         self.players[player_id]['health'] -= 50
                         self.players[player_id]['has_cannon'] = False
                         self.players[player_id]['cannon_id'] = None
-                        
-                        # Check if player is eliminated by explosion
+                          # Check if player is eliminated by explosion
                         if self.players[player_id]['health'] <= 0:
                             self.players[player_id]['alive'] = False
                             self.players[player_id]['health'] = 0
@@ -587,6 +586,17 @@ class GameServer:
                                 'player_id': player_id,
                                 'eliminator_id': None  # Eliminated by cannon explosion
                             })
+                            
+                            # Check if the game is over - THIS WAS MISSING
+                            alive_players = [p for p_id, p in self.players.items() if p['alive']]
+                            if len(alive_players) <= 1:
+                                # Game over - last player standing wins
+                                winner_id = alive_players[0]['id'] if alive_players else None
+                                self.broadcast_message('game_over', {
+                                    'winner_id': winner_id
+                                })
+                                # Reset the game in 10 seconds
+                                threading.Timer(10, self.reset_game).start()
                         
                         # Broadcast hit
                         self.broadcast_message('player_hit', {

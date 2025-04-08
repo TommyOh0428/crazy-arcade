@@ -57,7 +57,7 @@ class GameServer:
         # Create a pattern of obstacles
         for i in range(1, grid_width - 1):
             for j in range(1, grid_height - 1):
-                if (i + j) % 3 == 0:  # Create a pattern
+                if (i + j) % 2 == 0:  # Create a pattern
                     self.obstacles.append({
                         'x': i * self.grid_size,
                         'y': j * self.grid_size,
@@ -422,9 +422,9 @@ class GameServer:
                 
                 # Set properties based on type - increasing speeds significantly
                 properties = {
-                    'RAPID': {'damage': 10, 'speed': 40, 'cooldown': 0.3, 'shots': 10, 'radius': 5, 'color': (255, 0, 0)},
-                    'EXPLOSIVE': {'damage': 30, 'speed': 25, 'cooldown': 1.0, 'shots': 3, 'radius': 15, 'color': (255, 255, 0)},
-                    'BOUNCING': {'damage': 15, 'speed': 35, 'cooldown': 0.7, 'shots': 5, 'radius': 8, 'color': (0, 255, 0)}
+                    'RAPID': {'damage': 10, 'speed': 350, 'cooldown': 0.3, 'shots': 10, 'radius': 5, 'color': (255, 0, 0)},
+                    'EXPLOSIVE': {'damage': 30, 'speed': 250, 'cooldown': 1.0, 'shots': 3, 'radius': 15, 'color': (255, 255, 0)},
+                    'BOUNCING': {'damage': 15, 'speed': 200, 'cooldown': 0.7, 'shots': 5, 'radius': 8, 'color': (0, 255, 0)}
                 }
                 
                 # Create the cannon
@@ -499,25 +499,9 @@ class GameServer:
                     # Remove projectile
                     self.projectiles.remove(projectile)
                     continue
-            
-            # Check for collisions with obstacles
-            for obstacle in self.obstacles:
-                ox, oy = obstacle['x'], obstacle['y']
-                ow, oh = obstacle['width'], obstacle['height']
-                
-                # Simple collision check
-                if (ox - projectile['radius'] <= x <= ox + ow + projectile['radius'] and 
-                    oy - projectile['radius'] <= y <= oy + oh + projectile['radius']):
-                    if projectile['can_bounce'] and projectile['bounces'] > 0:
-                        # Simple bounce - reverse direction
-                        projectile['dx'] = -projectile['dx']
-                        projectile['dy'] = -projectile['dy']
-                        projectile['bounces'] -= 1
-                    else:
-                        # Remove projectile
-                        if projectile in self.projectiles:
-                            self.projectiles.remove(projectile)
-                        break
+              # Check for collisions with obstacles - DISABLED
+            # Projectiles now ignore obstacles and pass through them
+            # Keeping this comment block to document the change
             
             # Check for collisions with players
             for player_id, player in self.players.items():

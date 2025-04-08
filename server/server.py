@@ -44,6 +44,7 @@ class GameServer:
         # Auto-termination for empty server
         self.empty_server_start_time = None
         self.empty_server_timeout = 30  # Terminate after 30 seconds of inactivity
+        self.player_ever_joined = False  # Flag to track if any player has ever joined
         
         # Generate map obstacles
         self.generate_obstacles()
@@ -178,6 +179,9 @@ class GameServer:
                     self.broadcast_message('game_start', {'message': 'Game starting!'})
                     # Spawn the first cannon
                     self.spawn_cannon()
+                
+                # Set player_ever_joined flag to True
+                self.player_ever_joined = True
             except json.JSONDecodeError as e:
                 print(f"Invalid JSON in registration: {e}")
                 return
@@ -680,12 +684,11 @@ class GameServer:
                     self.broadcast_game_update()
                 
                 last_update_time = current_time
-            
-            # Check for server termination due to inactivity
-            if not self.clients and self.empty_server_start_time is None:
-                # Server just became empty, start the timer
+              # Check for server termination due to inactivity
+            if not self.clients and self.player_ever_joined and self.empty_server_start_time is None:
+                # Server just became empty after having players, start the timer
                 self.empty_server_start_time = current_time
-                print(f"No players connected. Server will terminate in {self.empty_server_timeout} seconds if no one joins.")
+                print(f"All players disconnected. Server will terminate in {self.empty_server_timeout} seconds if no one joins.")
             elif self.clients:
                 # Reset timer if any clients are connected
                 self.empty_server_start_time = None

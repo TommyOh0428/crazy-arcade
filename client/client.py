@@ -145,8 +145,6 @@ class GameClient:
         self.input_y = 0
         self.last_send_time = 0
         self.input_update_rate = 0.05  # 20 updates per second
-        
-        # No longer create a local cannon - we'll use server-synced cannons only
     
     def get_player_name(self):
         """Display a text input dialog to get the player name"""
@@ -757,17 +755,62 @@ class GameClient:
         
         # Draw powerups
         for powerup_id, powerup in self.powerups.items():
-            powerup.draw(self.window)
-        
-        # Draw cannons - draw ALL cannons regardless of who controls them
+            powerup.draw(self.window)        # Draw cannons - draw ALL cannons regardless of who controls them
         for cannon_id, cannon in self.cannons.items():
             try:
-                # Draw the cannon as a bright yellow circle (easy to see)
-                pygame.draw.circle(self.window, (255, 255, 0), (int(cannon.x), int(cannon.y)), cannon.radius)
+                # Standardize all cannons to the same size (15 - size of exploding cannon)
+                standard_radius = 15
+                
+                # Set cannon color based on type
+                if cannon.type == "EXPLOSIVE":
+                    cannon_color = (255, 255, 0)  # Yellow for explosive
+                elif cannon.type == "BOUNCING":
+                    cannon_color = (0, 255, 0)    # Green for bouncing
+                elif cannon.type == "RAPID":
+                    cannon_color = (255, 0, 0)    # Red for rapid
+                else:
+                    cannon_color = (255, 255, 0)  # Default to yellow
+                
+                # Draw the cannon base circle with type-specific color
+                pygame.draw.circle(self.window, cannon_color, (int(cannon.x), int(cannon.y)), standard_radius)
+                
+                # Add type-specific iconography based on cannon type (all icons in black)
+                if cannon.type == "EXPLOSIVE":
+                    # Draw explosion-like icon (asterisk shape)
+                    for angle in range(0, 360, 45):
+                        rad_angle = math.radians(angle)
+                        start_x = int(cannon.x + (standard_radius * 0.4 * math.cos(rad_angle)))
+                        start_y = int(cannon.y + (standard_radius * 0.4 * math.sin(rad_angle)))
+                        end_x = int(cannon.x + (standard_radius * 0.9 * math.cos(rad_angle)))
+                        end_y = int(cannon.y + (standard_radius * 0.9 * math.sin(rad_angle)))
+                        pygame.draw.line(self.window, (0, 0, 0), (start_x, start_y), (end_x, end_y), 2)
+                
+                elif cannon.type == "BOUNCING":
+                    # Draw bounce icon (zigzag line)
+                    points = [
+                        (int(cannon.x - standard_radius * 0.7), int(cannon.y)),
+                        (int(cannon.x - standard_radius * 0.35), int(cannon.y - standard_radius * 0.5)),
+                        (int(cannon.x + standard_radius * 0.35), int(cannon.y + standard_radius * 0.5)),
+                        (int(cannon.x + standard_radius * 0.7), int(cannon.y))
+                    ]
+                    pygame.draw.lines(self.window, (0, 0, 0), False, points, 2)
+                
+                elif cannon.type == "RAPID":
+                    # Draw rapid fire icon (three parallel lines)
+                    line_length = standard_radius * 0.8
+                    for i in range(-1, 2):
+                        offset = i * 4
+                        pygame.draw.line(
+                            self.window,
+                            (0, 0, 0),
+                            (int(cannon.x - line_length/2), int(cannon.y + offset)),
+                            (int(cannon.x + line_length/2), int(cannon.y + offset)),
+                            2
+                        )
                 
                 # Draw a white outline around free cannons
                 if cannon.controlled_by is None:
-                    pygame.draw.circle(self.window, (255, 255, 255), (int(cannon.x), int(cannon.y)), cannon.radius + 2, 2)
+                    pygame.draw.circle(self.window, (255, 255, 255), (int(cannon.x), int(cannon.y)), standard_radius + 2, 2)
             except Exception as e:
                 print(f"Error drawing cannon {cannon_id}: {e}")
         

@@ -30,8 +30,6 @@ class Cannon:
             self.controlled_by = None
             self.use_timer = 0
             self.last_shot_time = 0
-        
-        self.projectiles = []
 
     def update(self, data=None):
         """Update cannon state from server data"""
@@ -50,26 +48,3 @@ class Cannon:
                 self.last_shot_time = data['last_shot_time']
             if 'color' in data:
                 self.color = tuple(data['color']) if isinstance(data['color'], list) else data['color']
-        
-        # Update all projectiles
-        for projectile in self.projectiles:
-            projectile.update()
-
-        # Remove projectiles that go off-screen
-        self.projectiles = [p for p in self.projectiles if p.y > 0]
-
-    def draw(self, surface):
-        # Draw the cannon as a circle
-        pygame.draw.circle(surface, self.color, (int(self.x), int(self.y)), self.radius)
-        
-        # If cannon is free (not controlled), draw a white outline
-        if self.controlled_by is None:
-            pygame.draw.circle(surface, (255, 255, 255), (int(self.x), int(self.y)), self.radius + 5, 2)
-
-        # Draw projectiles
-        for projectile in self.projectiles:
-            projectile.draw(surface)
-
-    def shoot(self):
-        # Add a new projectile starting from the cannon's position
-        self.projectiles.append(Projectile(self.x, self.y, 0, -5))  # Shoots upward

@@ -7,6 +7,7 @@ RED = (255, 0, 0)
 GREEN = (0, 255, 0)
 YELLOW = (255, 255, 0)
 WHITE = (255, 255, 255)
+ORANGE = (255, 165, 0)  # For cannon timer indicator
 
 # Constants
 PLAYER_RADIUS = 20
@@ -26,11 +27,11 @@ class Player:
         self.alive = True
         self.has_cannon = False
         self.cannon_id = None
+        self.cannon_use_timer = 0  # Track how long the cannon has been held
         self.speed_boosted = False
         self.speed_boost_end_time = 0
         self.boost_particles = []
         self.font = pygame.font.SysFont(None, 24)  # Font for player name
-    
     def update(self, data):
         """Update player state from server data"""
         if 'x' in data:
@@ -53,6 +54,10 @@ class Player:
         if self.speed_boosted and current_time > self.speed_boost_end_time:
             self.speed_boosted = False
             self.speed = PLAYER_NORMAL_SPEED
+        
+        # Reset cannon timer if player no longer has a cannon
+        if not self.has_cannon:
+            self.cannon_use_timer = 0
     
     def apply_speed_boost(self):
         """Apply speed boost for 10 seconds"""
@@ -76,8 +81,7 @@ class Player:
         health_width = 40 * (self.health / PLAYER_MAX_HEALTH)
         pygame.draw.rect(surface, RED, (self.x - 20, self.y - 30, 40, 5))
         pygame.draw.rect(surface, GREEN, (self.x - 20, self.y - 30, health_width, 5))
-        
-        # Draw speed boost indicator if active
+          # Draw speed boost indicator if active
         if self.speed_boosted:
             time_remaining = self.speed_boost_end_time - time.time()
             if time_remaining > 0:
@@ -87,3 +91,17 @@ class Player:
                 # Draw boost timer indicator
                 boost_width = 40 * (time_remaining / 10)
                 pygame.draw.rect(surface, YELLOW, (self.x - 20, self.y - 25, boost_width, 3))
+        
+        # Draw cannon timer indicator if player has a cannon
+        if self.has_cannon and hasattr(self, 'cannon_use_timer'):
+            # Calculate remaining time (10 seconds max before explosion)
+            time_remaining = 10 - self.cannon_use_timer
+            if time_remaining > 0:
+                # Draw an orange ring around the player
+                pygame.draw.circle(surface, ORANGE, (int(self.x), int(self.y)), PLAYER_RADIUS + 6, 2)
+                
+                # Draw cannon timer indicator
+                # If speed boost is active, position the cannon timer below it
+                y_offset = -20 if self.speed_boosted else -25
+                cannon_width = 40 * (time_remaining / 10)
+                pygame.draw.rect(surface, ORANGE, (self.x - 20, self.y + y_offset, cannon_width, 3))

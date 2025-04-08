@@ -398,8 +398,7 @@ class GameClient:
                         if 'x' in local_data: del local_data['x']
                         if 'y' in local_data: del local_data['y']
                         self.local_player.update(local_data)
-            
-            # Update cannons
+              # Update cannons
             current_cannons = set()
             for cannon_data in data.get('cannons', []):
                 cannon_id = cannon_data.get('id', 'unknown')
@@ -409,6 +408,11 @@ class GameClient:
                     self.cannons[cannon_id] = Cannon(cannon_data)
                 else:
                     self.cannons[cannon_id].update(cannon_data)
+                    
+                # If this cannon is controlled by a player, update the player's cannon timer
+                controlled_by = cannon_data.get('controlled_by')
+                if controlled_by and controlled_by in self.players:
+                    self.players[controlled_by].cannon_use_timer = cannon_data.get('use_timer', 0)
             
             # Remove cannons that no longer exist
             for cannon_id in list(self.cannons.keys()):

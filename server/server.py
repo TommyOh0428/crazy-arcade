@@ -495,10 +495,13 @@ class GameServer:
                     dx = px - x
                     dy = py - y
                     distance = (dx*dx + dy*dy) ** 0.5
-                    
                     if distance < 20 + projectile['radius']:  # Player radius + projectile radius
                         # Player is hit
-                        player['health'] -= projectile['damage']
+                        # In sudden death mode, any hit is fatal
+                        if self.sudden_death:
+                            player['health'] = 0  # Instant elimination in sudden death
+                        else:
+                            player['health'] -= projectile['damage']  # Normal damage in regular mode
                         
                         # Check if player is eliminated
                         if player['health'] <= 0:
@@ -522,6 +525,15 @@ class GameServer:
                                 'player_id': player_id,
                                 'eliminator_id': projectile.get('owner_id')
                             })
+                            
+                            # Add a specific message for sudden death eliminations
+                            if self.sudden_death:
+                                self.broadcast_message('player_hit', {
+                                    'player_id': player_id,
+                                    'damage': player['health'],
+                                    'health': 0,
+                                    'sudden_death_kill': True
+                                })
                             
                             # Check if the game is over
                             alive_players = [p for p_id, p in self.players.items() if p['alive']]

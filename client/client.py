@@ -364,13 +364,17 @@ class GameClient:
             if projectile_data:
                 projectile_id = projectile_data['id']
                 self.projectiles[projectile_id] = Projectile(projectile_data)
-        
+                
         elif msg_type == 'player_hit':
             player_id = data.get('player_id')
             damage = data.get('damage')
+            is_sudden_death_kill = data.get('sudden_death_kill', False)
             
             if player_id == self.client_id:
-                self.add_message(f"You took {damage} damage!")
+                if is_sudden_death_kill:
+                    self.add_message("You got one-shotted in SUDDEN DEATH!")
+                else:
+                    self.add_message(f"You took {damage} damage!")
         
         elif msg_type == 'player_eliminated':
             player_id = data.get('player_id')

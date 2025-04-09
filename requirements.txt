@@ -1,1 +1,7 @@
+"""
+requirements.txt
+
+This file lists the Python dependencies required for the project. It is used to install the necessary packages using pip.
+"""
+
 pygame

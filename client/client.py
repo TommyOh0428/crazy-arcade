@@ -12,15 +12,16 @@ from cannon import Cannon
 from projectile import Projectile
 from obstacle import Obstacle
 from powerup import PowerUp
+from text_input import TextInput
 
-# Game constants
+# Constants we need 
 WINDOW_WIDTH = 1000
 WINDOW_HEIGHT = 700
 GRID_SIZE = 50
 PLAYER_RADIUS = 20
 PLAYER_MAX_HEALTH = 100
 
-# Colors
+# colors
 BLACK = (0, 0, 0)
 WHITE = (255, 255, 255)
 RED = (255, 0, 0)
@@ -28,76 +29,10 @@ GREEN = (0, 255, 0)
 BLUE = (0, 0, 255)
 YELLOW = (255, 255, 0)
 
-# Network settings
+# network config
 DEFAULT_SERVER = "127.0.0.1"
 DEFAULT_PORT = 5555
 BUFFER_SIZE = 4096
-
-class TextInput:
-    """A simple text input handler for pygame"""
-    def __init__(self, font=None, max_length=20, font_color=WHITE, antialias=True):
-        self.font = font if font else pygame.font.SysFont(None, 32)
-        self.text = ""
-        self.max_length = max_length
-        self.font_color = font_color
-        self.antialias = antialias
-        self.active = True
-        self.surface = None
-        self.cursor_visible = True
-        self.cursor_timer = 0
-        self.cursor_blink_interval = 0.5  # seconds
-        self.update_surface()
-    
-    def update(self, events, dt):
-        for event in events:
-            if event.type == KEYDOWN and self.active:
-                if event.key == K_BACKSPACE:
-                    self.text = self.text[:-1]
-                elif event.key == K_RETURN:
-                    return True  # Signal that Enter was pressed
-                elif len(self.text) < self.max_length and event.unicode.isprintable():
-                    self.text += event.unicode
-                
-                self.update_surface()
-        
-        # Blink cursor
-        self.cursor_timer += dt
-        if self.cursor_timer >= self.cursor_blink_interval:
-            self.cursor_timer = 0
-            self.cursor_visible = not self.cursor_visible
-            self.update_surface()
-                
-        return False
-    
-    def update_surface(self):
-        base_text = self.font.render(self.text, self.antialias, self.font_color)
-        
-        if self.cursor_visible and self.active:
-            # Add cursor at the end of text
-            cursor_pos = self.font.size(self.text)[0]
-            cursor_height = self.font.get_height()
-            
-            # Create surface with room for cursor
-            width = max(base_text.get_width() + 2, cursor_pos + 2)
-            self.surface = pygame.Surface((width, cursor_height), pygame.SRCALPHA)
-            self.surface.blit(base_text, (0, 0))
-            
-            # Add cursor
-            pygame.draw.line(
-                self.surface, 
-                self.font_color, 
-                (cursor_pos, 2), 
-                (cursor_pos, cursor_height - 2), 
-                2
-            )
-        else:
-            self.surface = base_text
-        
-    def get_surface(self):
-        return self.surface
-    
-    def get_text(self):
-        return self.text
 
 class GameClient:
     def __init__(self, server_address=DEFAULT_SERVER, port=DEFAULT_PORT):
@@ -105,7 +40,6 @@ class GameClient:
         self.ping_interval = 5  # seconds
         self.ping_sent_time = 0
         self.latency_ms = None
-        # Initialize pygame
         pygame.init()
         self.window = pygame.display.set_mode((WINDOW_WIDTH, WINDOW_HEIGHT))
         pygame.display.set_caption("Cannon Chaos - Client")
@@ -147,7 +81,6 @@ class GameClient:
         self.input_update_rate = 0.05  # 20 updates per second
     
     def get_player_name(self):
-        """Display a text input dialog to get the player name"""
         text_input = TextInput(max_length=15)
         background = pygame.Surface((WINDOW_WIDTH, WINDOW_HEIGHT))
         background.fill(BLACK)
@@ -164,7 +97,7 @@ class GameClient:
         default_name = f"Player_{random.randint(100, 999)}"
         
         while not name_entered:
-            dt = self.clock.tick(30) / 1000.0  # Convert to seconds
+            dt = self.clock.tick(30) / 1000.0 
             
             events = pygame.event.get()
             for event in events:
@@ -180,17 +113,15 @@ class GameClient:
                 name = text_input.get_text().strip() or default_name
                 return name
             
-            # Draw background
+            # background
             self.window.blit(background, (0, 0))
-            
-            # Draw title
+            # title
             self.window.blit(title_text, title_rect)
-            
-            # Draw text box
+            # text box
             text_surface = text_input.get_surface()
             text_rect = text_surface.get_rect(center=(WINDOW_WIDTH//2, WINDOW_HEIGHT//2))
             
-            # Draw box around text input
+            # box around text input
             input_box_rect = pygame.Rect(text_rect)
             input_box_rect.inflate_ip(20, 10)
             pygame.draw.rect(self.window, WHITE, input_box_rect, 2)
@@ -203,18 +134,17 @@ class GameClient:
         return default_name
     
     def connect_to_server(self):
-        """Connect to the game server"""
         try:
             self.socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
             self.socket.connect((self.server_address, self.port))
             
-            # Generate a random client ID and remember it
+            # generate random client ID and remember it
             self.client_id = f"player_{random.randint(1000, 9999)}"
             
-            # Generate a random color for this player
+            # Generate random player color 
             color = (random.randint(100, 255), random.randint(100, 255), random.randint(100, 255))
             
-            # Send player registration
+            # Send player reg
             registration = {
                 'client_id': self.client_id,  # Use our saved client_id
                 'color': color,
@@ -222,15 +152,15 @@ class GameClient:
             }
             self.socket.sendall(json.dumps(registration).encode('utf-8'))
             
-            # PRE-CREATE our local player with the ID we've chosen
-            # This ensures we have a player to move regardless of server behavior
+            # Pre-make our local player with the ID we've chosen
+            # have a player to move regardless of server behavior
             print(f"PRE-CREATING local player with ID: {self.client_id}")
             x = random.randint(50, WINDOW_WIDTH - 50)
             y = random.randint(50, WINDOW_HEIGHT - 50)
             self.local_player = Player(x, y, color, self.client_id, self.player_name)
             self.players[self.client_id] = self.local_player
             
-            # Start listening for server messages
+            # listening server messages
             self.connected = True
             receive_thread = threading.Thread(target=self.receive_messages)
             receive_thread.daemon = True
@@ -242,8 +172,7 @@ class GameClient:
             return False
     
     def receive_messages(self):
-        """Listen for messages from the server"""
-        buffer = ""  # Buffer to accumulate incomplete messages
+        buffer = ""  # incomplete messages
         
         while self.connected:
             try:
@@ -252,21 +181,18 @@ class GameClient:
                     self.disconnect()
                     break
                 
-                # Add received data to buffer
                 buffer += data.decode('utf-8')
                 
-                # Process complete messages in buffer
                 while True:
                     try:
-                        # Try to parse a complete JSON message
+                        # try to parse a complete JSON message
                         message, buffer = self.extract_json(buffer)
                         if not message:
-                            break  # No complete message found
+                            break  
                         
                         # Process the message
                         self.handle_server_message(message)
                     except json.JSONDecodeError:
-                        # JSON parsing failed, might be incomplete
                         break
                     except Exception as e:
                         print(f"Error processing server message: {e}")
@@ -281,14 +207,13 @@ class GameClient:
                 break
     
     def extract_json(self, buffer):
-        """Extract a complete JSON object from the buffer"""
         try:
-            # Try to find a complete JSON object with proper message boundary handling
+            # try to find a complete JSON object with proper message bound handling
             json_start = buffer.find('{')
             if json_start == -1:
-                return None, buffer  # No JSON start found
+                return None, buffer  # none found
             
-            # Find where the JSON object ends
+            # where json object ends
             depth = 0
             for i in range(json_start, len(buffer)):
                 if buffer[i] == '{':
@@ -296,26 +221,25 @@ class GameClient:
                 elif buffer[i] == '}':
                     depth -= 1
                     if depth == 0:
-                        # Found a complete JSON object
+                        # found a complete JSON object
                         try:
                             obj = json.loads(buffer[json_start:i+1])
-                            return obj, buffer[i+1:]  # Return parsed object and remainder
+                            return obj, buffer[i+1:]  
                         except json.JSONDecodeError:
-                            pass  # Not a valid JSON, continue searching
+                            pass 
             
-            # No complete JSON found
+            # no complete JSON found
             return None, buffer
         except Exception as e:
             print(f"Error parsing JSON: {e}")
             return None, buffer
     
     def handle_server_message(self, message):
-        """Process messages from the server"""
         msg_type = message.get('type')
         data = message.get('data', {})
         
         if msg_type == 'init':
-            # Initial game state
+            # initial game state
             self.client_id = data.get('client_id')
             print(f"Received init message with client_id: {self.client_id}")
             
@@ -357,9 +281,7 @@ class GameClient:
                 self.cannons[cannon_id] = Cannon(cannon_data)
                 
         elif msg_type == 'game_update':
-            # Update game state
-            
-            # Update players
+            # update game state and players
             for player_id, player_data in data.get('players', {}).items():
                 if player_id not in self.players:
                     color = tuple(player_data['color']) if isinstance(player_data['color'], list) else player_data['color']
@@ -367,16 +289,12 @@ class GameClient:
                     if player_id == self.client_id:
                         self.local_player = self.players[player_id]
                 else:
-                    # Only update other players from server data
-                    # For local player, we handle movement locally for responsiveness
                     if player_id != self.client_id:
-                        # For remote players, store their current position for interpolation
                         if hasattr(self.players[player_id], 'x') and hasattr(self.players[player_id], 'y'):
                             self.players[player_id].prev_x = self.players[player_id].x
                             self.players[player_id].prev_y = self.players[player_id].y
                             self.players[player_id].interp_start_time = time.time()
                         else:
-                            # First update, no interpolation needed
                             self.players[player_id].prev_x = player_data['x']
                             self.players[player_id].prev_y = player_data['y']
                             self.players[player_id].interp_start_time = time.time()
@@ -465,7 +383,7 @@ class GameClient:
                     self.cannons[cannon_id] = Cannon(cannon_data)
                     self.add_message(f"New {cannon_data.get('type', 'unknown')} cannon spawned!")
                 except Exception as e:
-                    pass  # silently handle errors
+                    pass 
         
         elif msg_type == 'cannon_pickup':
             cannon_id = data.get('cannon_id')
@@ -474,7 +392,7 @@ class GameClient:
             if cannon_id in self.cannons and player_id in self.players:
                 self.cannons[cannon_id].controlled_by = player_id
                 
-                # IMPORTANT: Explicitly set the has_cannon flag on the player
+                # explicitly set the has_cannon flag on the player
                 if player_id == self.client_id:
                     print(f"DEBUG: You picked up cannon {cannon_id}")
                     self.local_player.has_cannon = True
@@ -532,11 +450,11 @@ class GameClient:
                         self.local_player.apply_speed_boost()
                         self.add_message("You picked up a speed boost! Moving 1.5x faster for 10 seconds!")
                 else:
-                    # Apply speed boost to other players too so their movement is consistent
+                    # apply speed boost to other players too so their movement is consistent
                     if powerup_type == 'SPEED':
                         self.players[player_id].apply_speed_boost()
                 
-                # Remove powerup
+                # remove powerup
                 if powerup_id in self.powerups:
                     del self.powerups[powerup_id]
         
@@ -568,11 +486,11 @@ class GameClient:
 
         elif msg_type == 'pong':
             now = time.time()
-            rtt = (now - self.ping_sent_time) * 1000  # Round-trip time in ms
+            # Round-trip time in ms
+            rtt = (now - self.ping_sent_time) * 1000  
             self.latency_ms = int(rtt)
     
     def send_update(self):
-        """Send player update to server"""
         if not self.connected or not self.local_player or not self.local_player.alive:
             return
         
@@ -592,13 +510,11 @@ class GameClient:
             self.disconnect()
     
     def try_pickup_cannon(self):
-        """Attempt to pick up a nearby cannon"""
         if not self.connected or not self.local_player or not self.local_player.alive or self.local_player.has_cannon:
             return
         
         for cannon_id, cannon in self.cannons.items():
             if cannon.controlled_by is None:
-                # Check if player is close enough to pick up cannon
                 dx = self.local_player.x - cannon.x
                 dy = self.local_player.y - cannon.y
                 distance = (dx*dx + dy*dy) ** 0.5
@@ -619,7 +535,6 @@ class GameClient:
                     return
     
     def try_shoot_cannon(self, target_x, target_y):
-        """Attempt to shoot with the equipped cannon"""
         if not self.connected or not self.local_player:
             print("DEBUG: Cannot shoot - not connected or no local player")
             return
@@ -649,19 +564,16 @@ class GameClient:
             self.disconnect()
 
     def add_message(self, text):
-        """Add a message to the message queue"""
         self.messages.append({
             'text': text,
             'time': time.time()
         })
     
     def update_messages(self):
-        """Update message display times and remove old messages"""
         current_time = time.time()
         self.messages = [msg for msg in self.messages if current_time - msg['time'] < self.message_timeout]
     
     def handle_input(self):
-        """Handle user input"""
         # Process one-time events
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
@@ -673,7 +585,7 @@ class GameClient:
             elif event.type == pygame.KEYDOWN and event.key == pygame.K_e:
                 self.try_pickup_cannon()
                 
-            # Space to shoot cannon - changed from mouse click to key press
+            # Space to shoot cannon
             elif event.type == pygame.KEYDOWN and event.key == pygame.K_SPACE:
                 if self.local_player and self.local_player.has_cannon:
                     # Get mouse position for aiming direction
@@ -684,7 +596,6 @@ class GameClient:
             elif event.type == pygame.KEYDOWN and event.key == pygame.K_t and self.local_player:
                 self.local_player.x = 500
                 self.local_player.y = 500
-                print(f"DEBUG: Teleported player to (500, 500)")
                 self.send_update()
         
         # Check if local player exists
@@ -710,7 +621,7 @@ class GameClient:
             if keys[K_DOWN] or keys[K_s]:
                 dy += 1
             
-            # Normalize diagonal movement
+            # diagonal movement
             if dx != 0 and dy != 0:
                 dx *= 0.7071  # 1/sqrt(2)
                 dy *= 0.7071
@@ -745,7 +656,6 @@ class GameClient:
             self.input_y = 0
     
     def draw(self):
-        """Render the game state"""
         # Clear the screen
         self.window.fill(BLACK)
         
@@ -755,28 +665,26 @@ class GameClient:
         
         # Draw powerups
         for powerup_id, powerup in self.powerups.items():
-            powerup.draw(self.window)        # Draw cannons - draw ALL cannons regardless of who controls them
+            powerup.draw(self.window)        
         for cannon_id, cannon in self.cannons.items():
             try:
-                # Standardize all cannons to the same size (15 - size of exploding cannon)
                 standard_radius = 15
                 
                 # Set cannon color based on type
                 if cannon.type == "EXPLOSIVE":
-                    cannon_color = (255, 255, 0)  # Yellow for explosive
+                    cannon_color = (255, 255, 0)  
                 elif cannon.type == "BOUNCING":
-                    cannon_color = (0, 255, 0)    # Green for bouncing
+                    cannon_color = (0, 255, 0)   
                 elif cannon.type == "RAPID":
-                    cannon_color = (255, 0, 0)    # Red for rapid
+                    cannon_color = (255, 0, 0)    
                 else:
-                    cannon_color = (255, 255, 0)  # Default to yellow
+                    cannon_color = (255, 255, 0)
                 
                 # Draw the cannon base circle with type-specific color
                 pygame.draw.circle(self.window, cannon_color, (int(cannon.x), int(cannon.y)), standard_radius)
                 
-                # Add type-specific iconography based on cannon type (all icons in black)
                 if cannon.type == "EXPLOSIVE":
-                    # Draw explosion-like icon (asterisk shape)
+                    # explosion-like icon (asterisk shape)
                     for angle in range(0, 360, 45):
                         rad_angle = math.radians(angle)
                         start_x = int(cannon.x + (standard_radius * 0.4 * math.cos(rad_angle)))
@@ -786,7 +694,7 @@ class GameClient:
                         pygame.draw.line(self.window, (0, 0, 0), (start_x, start_y), (end_x, end_y), 2)
                 
                 elif cannon.type == "BOUNCING":
-                    # Draw bounce icon (zigzag line)
+                    # bounce icon (zigzag line)
                     points = [
                         (int(cannon.x - standard_radius * 0.7), int(cannon.y)),
                         (int(cannon.x - standard_radius * 0.35), int(cannon.y - standard_radius * 0.5)),
@@ -796,7 +704,7 @@ class GameClient:
                     pygame.draw.lines(self.window, (0, 0, 0), False, points, 2)
                 
                 elif cannon.type == "RAPID":
-                    # Draw rapid fire icon (three parallel lines)
+                    # rapid fire icon (three parallel lines)
                     line_length = standard_radius * 0.8
                     for i in range(-1, 2):
                         offset = i * 4
@@ -808,13 +716,13 @@ class GameClient:
                             2
                         )
                 
-                # Draw a white outline around free cannons
+                # white outline around free cannons
                 if cannon.controlled_by is None:
                     pygame.draw.circle(self.window, (255, 255, 255), (int(cannon.x), int(cannon.y)), standard_radius + 2, 2)
             except Exception as e:
                 print(f"Error drawing cannon {cannon_id}: {e}")
         
-        # Draw players (including local player for debugging)
+        # Draw players
         for player_id, player in self.players.items():
             player.draw(self.window)
         
@@ -836,7 +744,6 @@ class GameClient:
             pygame.draw.line(self.window, (255, 0, 0), (mouse_x - 15, mouse_y), (mouse_x + 15, mouse_y), 2)
             pygame.draw.line(self.window, (255, 0, 0), (mouse_x, mouse_y - 15), (mouse_x, mouse_y + 15), 2)
         
-        # Draw UI elements
         if self.sudden_death:
             text = self.font.render("SUDDEN DEATH", True, RED)
             self.window.blit(text, (WINDOW_WIDTH//2 - text.get_width()//2, 10))
@@ -871,7 +778,7 @@ class GameClient:
         # Draw game over screen
         if self.game_over:
             overlay = pygame.Surface((WINDOW_WIDTH, WINDOW_HEIGHT), pygame.SRCALPHA)
-            overlay.fill((0, 0, 0, 128))  # Semi-transparent black
+            overlay.fill((0, 0, 0, 128))
             self.window.blit(overlay, (0, 0))
             
             if self.winner_id == self.client_id:
@@ -888,29 +795,21 @@ class GameClient:
         pygame.display.update()
     
     def update(self):
-        """Update game state"""
-        delta_time = self.clock.get_time() / 1000.0  # Convert to seconds
+        delta_time = self.clock.get_time() / 1000.0
         
         # Update messages
         self.update_messages()
         
-        # Interpolate positions for other players to reduce jitter
         current_time = time.time()
         for player_id, player in self.players.items():
-            # Skip local player, we control it directly
             if player_id == self.client_id:
                 continue
-                
-            # Skip players without interpolation data
             if not hasattr(player, 'interp_start_time') or not hasattr(player, 'target_x'):
                 continue
-                
-            # Interpolate over 100ms (adjust this value based on average network latency)
-            interp_duration = 0.1  # seconds
+            interp_duration = 0.1
             time_since_update = current_time - player.interp_start_time
             progress = min(time_since_update / interp_duration, 1.0)
             
-            # Linear interpolation between previous position and target position
             if hasattr(player, 'prev_x') and hasattr(player, 'prev_y'):
                 player.x = player.prev_x + (player.target_x - player.prev_x) * progress
                 player.y = player.prev_y + (player.target_y - player.prev_y) * progress
@@ -922,14 +821,13 @@ class GameClient:
             try:
                 self.socket.sendall(json.dumps({'type': 'ping'}).encode('utf-8'))
             except Exception as e:
-                pass  # Silently handle ping errors
+                pass
         
         # Update cannon objects
         for cannon_id, cannon in self.cannons.items():
             cannon.update()
     
     def disconnect(self):
-        """Disconnect from the server"""
         self.connected = False
         if self.socket:
             try:
@@ -940,8 +838,7 @@ class GameClient:
         self.add_message("Disconnected from server.")
     
     def run(self):
-        """Main game loop"""
-        # Connect to the server
+        # Connect to server
         if not self.connect_to_server():
             print("Failed to connect to server.")
             return

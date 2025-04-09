@@ -7,13 +7,13 @@ RED = (255, 0, 0)
 GREEN = (0, 255, 0)
 YELLOW = (255, 255, 0)
 WHITE = (255, 255, 255)
-ORANGE = (255, 165, 0)  # For cannon timer indicator
+ORANGE = (255, 165, 0) 
 
 # Constants
 PLAYER_RADIUS = 20
 PLAYER_MAX_HEALTH = 100
 PLAYER_NORMAL_SPEED = 5
-PLAYER_BOOST_SPEED = 7.5  # 1.5x normal speed
+PLAYER_BOOST_SPEED = 7.5 
 
 class Player:
     def __init__(self, x, y, color, player_id, name="Player"):
@@ -21,17 +21,17 @@ class Player:
         self.y = y
         self.color = color
         self.id = player_id
-        self.name = name  # Added name attribute
+        self.name = name  
         self.health = PLAYER_MAX_HEALTH
         self.speed = PLAYER_NORMAL_SPEED
         self.alive = True
         self.has_cannon = False
         self.cannon_id = None
-        self.cannon_use_timer = 0  # Track how long the cannon has been held
+        self.cannon_use_timer = 0 
         self.speed_boosted = False
         self.speed_boost_end_time = 0
         self.boost_particles = []
-        self.font = pygame.font.SysFont(None, 24)  # Font for player name
+        self.font = pygame.font.SysFont(None, 24)
     def update(self, data):
         """Update player state from server data"""
         if 'x' in data:
@@ -49,13 +49,13 @@ class Player:
         if 'name' in data:
             self.name = data['name']
         
-        # Check for speed boost timeout
+        # check for speed boost timeout
         current_time = time.time()
         if self.speed_boosted and current_time > self.speed_boost_end_time:
             self.speed_boosted = False
             self.speed = PLAYER_NORMAL_SPEED
         
-        # Reset cannon timer if player no longer has a cannon
+        # reset cannon timer if player no longer has a cannon
         if not self.has_cannon:
             self.cannon_use_timer = 0
     
@@ -63,8 +63,7 @@ class Player:
         """Apply speed boost for 10 seconds"""
         self.speed_boosted = True
         self.speed = PLAYER_BOOST_SPEED
-        self.speed_boost_end_time = time.time() + 10  # 10 seconds from now
-    
+        self.speed_boost_end_time = time.time() + 10 
     def draw(self, surface):
         if not self.alive:
             return

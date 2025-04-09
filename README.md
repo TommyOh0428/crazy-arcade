@@ -1,5 +1,5 @@
 <h4 align="center">
-    Crazy Arcade <br>
+    Cannon Chaos <br>
     CMPT 371: Data Communication / Networking
     <div align="center">
     <br>
@@ -12,6 +12,9 @@
 <p align="center">
     <a href="#team-member">Team member</a> •
     <a href="#framework">Framework</a> •
+    <a href="#gameplay-mechanics">Game Mechanics</a> •
+    <a href="#technical-details">Technical details</a> •
+    <a href="#setting-up">setup</a> •
     <a href="#contribution">Contribution</a>
 </p>
 
@@ -20,15 +23,12 @@
 - Tommy Oh (301544525)
 - Alex Chung (301549726)
 - Parmveer Singh Nijjar (301563903)
-- Munir Adam
+- Munir Adam (301568875)
 
 ### Framework
 
 - This project is based on Python
-
-- May use Pygame, or PyGUI, etc
-
-# Cannon Chaos
+- We are using the pygame interface for our frontend
 
 ## Overview  
 **Cannon Chaos** is a **real-time online multiplayer game** where players compete in a grid-based arena, racing to control powerful cannons and eliminate opponents. The last player standing wins.  
@@ -48,11 +48,9 @@ The game follows a **client-server architecture**, where one player hosts the se
 - **Explosive Shell** – Slow but has a large explosion radius.  
 - **Bouncing Shot** – Ricochets off walls, hitting unexpected angles.  
 
-### 🎯 Player Abilities  
-- Players must **dodge, hide, and strategize** to avoid being shot.  
-- **Dash ability** allows quick movement (short cooldown).  
-- **Health bar** decreases when hit; players are eliminated when it reaches zero.  
-- If two players try to grab the same cannon, a **quick reaction mini-game** (e.g., button mash) determines the winner.  
+### 🎯 Power-ups    
+- **Speed boost** allows quick movement (short cooldown).  
+- **Health bar** decreases when hit; players are eliminated when it reaches zero.   
 
 ### ⚡ Game Flow Enhancements  
 - **Power-ups** drop when a player is eliminated (e.g., speed boost, health pack).  
@@ -70,50 +68,71 @@ The game follows a **client-server architecture**, where one player hosts the se
 - **Simple 2D Graphics**  
   - The game uses **Pygame** for rendering, focusing on functionality over complexity.  
 
-## Installation & Setup  
+## Setting up 
 ### Prerequisites  
 - Python 3.x  
-- Pygame (`pip install pygame`)  
+- Pygame  
 
 ### Running the Game  
-1. Start the server:  
-   ```sh
-   python server.py
 
-   ## Task Distribution  
+It is recommanded to use virtual environment.
+
+```sh
+// How to make virtual environment
+python3 -m venv .venv
+
+// Use the shell script to activate virtual environment
+source activate_venv.sh
+
+// Install dependency (we only used pygame)
+pip install -r requirements.txt 
+
+// or only pygame
+pip install pygame
+
+// Run the server
+python server/server.py
+
+// Join the game local client
+python client/client.py
+
+// Join the game as remote client
+python client/client.py <ip>
+
+```
 
 The project is developed by a **4-person team**, with each member focusing on a specific aspect of the game.  
 
-### 🖥️ Backend (Client-Server Communication) – **Developer 1**  
-- Implement **server logic** using raw Python sockets.  
-- Handle **message passing** between clients (player positions, cannon control, health updates).  
-- Use **multithreading** or **asyncio** to support multiple players.  
-
-### 🎮 Game Logic & Mechanics – **Developer 2**  
-- Implement **player movement, cannon mechanics, and health tracking**.  
-- Handle **collision detection** for cannon hits.  
-- Manage the **game loop and event handling**.  
-
-### 🖼️ Frontend (Graphics & UI) – **Developer 3**  
-- Implement **player sprites, map rendering, and UI elements** (health bar, timer, etc.).  
-- Display **cannon aiming and shooting animations**.  
-- Ensure smooth **user input handling** (mouse and keyboard).  
-
-### 📡 Networking Integration – **Developer 4**  
-- Connect **frontend to backend** (send and receive player actions).  
-- Optimize **message sending** to reduce latency and improve synchronization.  
-- Handle **game state updates** to ensure all players see consistent gameplay.  
-
-## Development Timeline  
-
-| Week  | Task |
-|-------|------|
-| **Week 1** | Set up **socket-based server**, basic **Pygame UI**, and **game loop**. |
-| **Week 2** | Implement **cannon locking, shooting mechanics, health tracking**. |
-| **Week 3** | Finalize **networking, smooth movement, and latency optimization**. |
-
-
-
 ### Contribution
 
-- placeholder
+**Every group member** handle client-server communication between all game components (ex. sychronizing player movement, cannon projectiles, etc)
+
+#### <u>Specific work done by each group member</u>
+
+
+- Alex (25%)
+  - implemented initial player movement and cannon shooting functionality
+  - implemented nickname functionality
+  - implement text_input.py
+  - code-cleanup
+
+
+- Tommy (25%)
+  - set up basic structure of client-server system and socket
+  - refactored the code (cannon.py, obstacle.py,..., etc)
+  - implemented basic structure of nickname functionality
+
+
+- Parmveer (25%)
+  -  implemented sudden death (added the logic where u can one-shot players during sudden death)
+  -  implemented speed boost and HP powerups
+  -  implemented ping (to track lag/latency)
+  -  implemented server timeout (so the server doesnt stay running forever after everyone disconnects)
+  -  code-cleanup
+
+
+- Munir (25%):
+  - implemented projectile shooting physics
+  - smoothen and restrict player movement
+  - game background and player design
+  - code clean up

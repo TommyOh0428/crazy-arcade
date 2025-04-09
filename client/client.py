@@ -555,7 +555,6 @@ class GameClient:
         
         try:
             self.socket.sendall(json.dumps(message).encode('utf-8'))
-            print("DEBUG: Shoot request sent successfully")
         except Exception as e:
             print(f"Error sending shoot request: {e}")
             self.disconnect()

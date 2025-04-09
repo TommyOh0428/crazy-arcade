@@ -4,7 +4,6 @@ from projectile import Projectile
 
 class Cannon:
     def __init__(self, data_or_x, y=None):
-        # Handle initialization with either position or full data dict
         if y is None and isinstance(data_or_x, dict):
             # Initialize from server data
             data = data_or_x
@@ -19,14 +18,13 @@ class Cannon:
             self.use_timer = data.get('use_timer', 0)
             self.last_shot_time = data.get('last_shot_time', 0)
         else:
-            # Initialize with position only (legacy constructor)
             self.id = ''
             self.x = data_or_x
             self.y = y
             self.type = 'RAPID'
             self.shots_left = 10
             self.radius = 20
-            self.color = (128, 128, 128)  # Gray color for the cannon
+            self.color = (128, 128, 128)
             self.controlled_by = None
             self.use_timer = 0
             self.last_shot_time = 0

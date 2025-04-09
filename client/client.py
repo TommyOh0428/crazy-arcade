@@ -394,7 +394,6 @@ class GameClient:
                 
                 # explicitly set the has_cannon flag on the player
                 if player_id == self.client_id:
-                    print(f"DEBUG: You picked up cannon {cannon_id}")
                     self.local_player.has_cannon = True
                     self.local_player.cannon_id = cannon_id
                     self.add_message("You picked up a cannon!")
@@ -546,9 +545,7 @@ class GameClient:
         if not self.local_player.has_cannon:
             print("DEBUG: Cannot shoot - player doesn't have a cannon")
             return
-            
-        print(f"DEBUG: Sending shoot request to target ({target_x}, {target_y})")
-        
+                    
         # Send shoot request to server
         message = {
             'type': 'cannon_shoot',

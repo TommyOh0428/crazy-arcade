@@ -136,3 +136,12 @@ The project is developed by a **4-person team**, with each member focusing on a 
   - smoothen and restrict player movement
   - game background and player design
   - code clean up
+
+## Code Snippets
+Includes socket opening/closing and handling of mutex-locked object (cannon).
+
+![server.py](public/371-1.png)
+![server.py](public/371-2.png)
+![client.py](public/371-3.png)
+![client.py](public/371-4.png)
+![server.py](public/371-5.png)

@@ -33,6 +33,72 @@ DEFAULT_SERVER = "127.0.0.1"
 DEFAULT_PORT = 5555
 BUFFER_SIZE = 4096
 
+class TextInput:
+    """A simple text input handler for pygame"""
+    def __init__(self, font=None, max_length=20, font_color=WHITE, antialias=True):
+        self.font = font if font else pygame.font.SysFont(None, 32)
+        self.text = ""
+        self.max_length = max_length
+        self.font_color = font_color
+        self.antialias = antialias
+        self.active = True
+        self.surface = None
+        self.cursor_visible = True
+        self.cursor_timer = 0
+        self.cursor_blink_interval = 0.5  # seconds
+        self.update_surface()
+    
+    def update(self, events, dt):
+        for event in events:
+            if event.type == KEYDOWN and self.active:
+                if event.key == K_BACKSPACE:
+                    self.text = self.text[:-1]
+                elif event.key == K_RETURN:
+                    return True  # Signal that Enter was pressed
+                elif len(self.text) < self.max_length and event.unicode.isprintable():
+                    self.text += event.unicode
+                
+                self.update_surface()
+        
+        # Blink cursor
+        self.cursor_timer += dt
+        if self.cursor_timer >= self.cursor_blink_interval:
+            self.cursor_timer = 0
+            self.cursor_visible = not self.cursor_visible
+            self.update_surface()
+                
+        return False
+    
+    def update_surface(self):
+        base_text = self.font.render(self.text, self.antialias, self.font_color)
+        
+        if self.cursor_visible and self.active:
+            # Add cursor at the end of text
+            cursor_pos = self.font.size(self.text)[0]
+            cursor_height = self.font.get_height()
+            
+            # Create surface with room for cursor
+            width = max(base_text.get_width() + 2, cursor_pos + 2)
+            self.surface = pygame.Surface((width, cursor_height), pygame.SRCALPHA)
+            self.surface.blit(base_text, (0, 0))
+            
+            # Add cursor
+            pygame.draw.line(
+                self.surface, 
+                self.font_color, 
+                (cursor_pos, 2), 
+                (cursor_pos, cursor_height - 2), 
+                2
+            )
+        else:
+            self.surface = base_text
+        
+    def get_surface(self):
+        return self.surface
+    
+    def get_text(self):
+        return self.text
+
 class GameClient:
     def __init__(self, server_address=DEFAULT_SERVER, port=DEFAULT_PORT):
         self.last_ping_time = 0
@@ -53,6 +119,7 @@ class GameClient:
         self.socket = None
         self.connected = False
         self.client_id = None
+        self.player_name = self.get_player_name()  # Get player name before connecting
         
         # Game state
         self.players = {}
@@ -78,8 +145,62 @@ class GameClient:
         self.input_y = 0
         self.last_send_time = 0
         self.input_update_rate = 0.05  # 20 updates per second
+    
+    def get_player_name(self):
+        """Display a text input dialog to get the player name"""
+        text_input = TextInput(max_length=15)
+        background = pygame.Surface((WINDOW_WIDTH, WINDOW_HEIGHT))
+        background.fill(BLACK)
         
-        # No longer create a local cannon - we'll use server-synced cannons only
+        title_font = pygame.font.SysFont(None, 48)
+        title_text = title_font.render("Enter Your Name:", True, WHITE)
+        title_rect = title_text.get_rect(center=(WINDOW_WIDTH//2, WINDOW_HEIGHT//2 - 60))
+        
+        instruction_font = pygame.font.SysFont(None, 24)
+        instruction_text = instruction_font.render("Press ENTER when done", True, WHITE)
+        instruction_rect = instruction_text.get_rect(center=(WINDOW_WIDTH//2, WINDOW_HEIGHT//2 + 40))
+        
+        name_entered = False
+        default_name = f"Player_{random.randint(100, 999)}"
+        
+        while not name_entered:
+            dt = self.clock.tick(30) / 1000.0  # Convert to seconds
+            
+            events = pygame.event.get()
+            for event in events:
+                if event.type == pygame.QUIT:
+                    pygame.quit()
+                    sys.exit()
+                if event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE:
+                    # Use default name if user presses escape
+                    return default_name
+            
+            # Update text input and check if Enter was pressed
+            if text_input.update(events, dt):
+                name = text_input.get_text().strip() or default_name
+                return name
+            
+            # Draw background
+            self.window.blit(background, (0, 0))
+            
+            # Draw title
+            self.window.blit(title_text, title_rect)
+            
+            # Draw text box
+            text_surface = text_input.get_surface()
+            text_rect = text_surface.get_rect(center=(WINDOW_WIDTH//2, WINDOW_HEIGHT//2))
+            
+            # Draw box around text input
+            input_box_rect = pygame.Rect(text_rect)
+            input_box_rect.inflate_ip(20, 10)
+            pygame.draw.rect(self.window, WHITE, input_box_rect, 2)
+            
+            self.window.blit(text_surface, text_rect)
+            self.window.blit(instruction_text, instruction_rect)
+            
+            pygame.display.update()
+        
+        return default_name
     
     def connect_to_server(self):
         """Connect to the game server"""
@@ -96,7 +217,8 @@ class GameClient:
             # Send player registration
             registration = {
                 'client_id': self.client_id,  # Use our saved client_id
-                'color': color
+                'color': color,
+                'name': self.player_name      # Send player name with registration
             }
             self.socket.sendall(json.dumps(registration).encode('utf-8'))
             
@@ -105,7 +227,7 @@ class GameClient:
             print(f"PRE-CREATING local player with ID: {self.client_id}")
             x = random.randint(50, WINDOW_WIDTH - 50)
             y = random.randint(50, WINDOW_HEIGHT - 50)
-            self.local_player = Player(x, y, color, self.client_id)
+            self.local_player = Player(x, y, color, self.client_id, self.player_name)
             self.players[self.client_id] = self.local_player
             
             # Start listening for server messages
@@ -274,8 +396,7 @@ class GameClient:
                         if 'x' in local_data: del local_data['x']
                         if 'y' in local_data: del local_data['y']
                         self.local_player.update(local_data)
-            
-            # Update cannons
+              # Update cannons
             current_cannons = set()
             for cannon_data in data.get('cannons', []):
                 cannon_id = cannon_data.get('id', 'unknown')
@@ -285,6 +406,11 @@ class GameClient:
                     self.cannons[cannon_id] = Cannon(cannon_data)
                 else:
                     self.cannons[cannon_id].update(cannon_data)
+                    
+                # If this cannon is controlled by a player, update the player's cannon timer
+                controlled_by = cannon_data.get('controlled_by')
+                if controlled_by and controlled_by in self.players:
+                    self.players[controlled_by].cannon_use_timer = cannon_data.get('use_timer', 0)
             
             # Remove cannons that no longer exist
             for cannon_id in list(self.cannons.keys()):
@@ -364,13 +490,17 @@ class GameClient:
             if projectile_data:
                 projectile_id = projectile_data['id']
                 self.projectiles[projectile_id] = Projectile(projectile_data)
-        
+
         elif msg_type == 'player_hit':
             player_id = data.get('player_id')
             damage = data.get('damage')
+            is_sudden_death_kill = data.get('sudden_death_kill', False)
             
             if player_id == self.client_id:
-                self.add_message(f"You took {damage} damage!")
+                if is_sudden_death_kill:
+                    self.add_message("You got one-shotted in SUDDEN DEATH!")
+                else:
+                    self.add_message(f"You took {damage} damage!")
         
         elif msg_type == 'player_eliminated':
             player_id = data.get('player_id')
@@ -389,7 +519,6 @@ class GameClient:
             if powerup_data:
                 powerup_id = powerup_data['id']
                 self.powerups[powerup_id] = PowerUp(powerup_data)
-        
         elif msg_type == 'powerup_pickup':
             powerup_id = data.get('powerup_id')
             player_id = data.get('player_id')
@@ -400,7 +529,12 @@ class GameClient:
                     if powerup_type == 'HEALTH':
                         self.add_message("You picked up a health boost!")
                     elif powerup_type == 'SPEED':
-                        self.add_message("You picked up a speed boost!")
+                        self.local_player.apply_speed_boost()
+                        self.add_message("You picked up a speed boost! Moving 1.5x faster for 10 seconds!")
+                else:
+                    # Apply speed boost to other players too so their movement is consistent
+                    if powerup_type == 'SPEED':
+                        self.players[player_id].apply_speed_boost()
                 
                 # Remove powerup
                 if powerup_id in self.powerups:
@@ -448,7 +582,6 @@ class GameClient:
             'data': {
                 'x': self.local_player.x,
                 'y': self.local_player.y,
-                'dash_cooldown': self.local_player.dash_cooldown
             }
         }
         
@@ -514,28 +647,7 @@ class GameClient:
         except Exception as e:
             print(f"Error sending shoot request: {e}")
             self.disconnect()
-    
-    def try_dash(self):
-        """Attempt to use dash ability"""
-        if (not self.connected or not self.local_player or 
-            not self.local_player.alive or self.local_player.dash_cooldown > 0 or
-            (self.input_x == 0 and self.input_y == 0)):
-            return
-        
-        # Send dash request to server
-        message = {
-            'type': 'dash',
-            'dx': self.input_x,
-            'dy': self.input_y
-        }
-        
-        try:
-            self.socket.sendall(json.dumps(message).encode('utf-8'))
-            self.local_player.dash_cooldown = 2  # Local prediction
-        except Exception as e:
-            print(f"Error sending dash request: {e}")
-            self.disconnect()
-    
+
     def add_message(self, text):
         """Add a message to the message queue"""
         self.messages.append({
@@ -567,9 +679,6 @@ class GameClient:
                     # Get mouse position for aiming direction
                     mouse_x, mouse_y = pygame.mouse.get_pos()
                     self.try_shoot_cannon(mouse_x, mouse_y)
-                else:
-                    # If not holding cannon, use space for dash
-                    self.try_dash()
                 
             # DEBUG: Force teleport player with T key
             elif event.type == pygame.KEYDOWN and event.key == pygame.K_t and self.local_player:
@@ -621,8 +730,8 @@ class GameClient:
                 new_y = old_y + dy * speed
                 
                 # Wall collision - keep player within bounds
-                new_x = max(PLAYER_RADIUS, min(WINDOW_WIDTH - PLAYER_RADIUS, new_x))
-                new_y = max(PLAYER_RADIUS, min(WINDOW_HEIGHT - PLAYER_RADIUS, new_y))
+                new_x = max(PLAYER_RADIUS+50, min(WINDOW_WIDTH-50 - PLAYER_RADIUS, new_x))
+                new_y = max(PLAYER_RADIUS+50, min(WINDOW_HEIGHT-50 - PLAYER_RADIUS, new_y))
                 
                 # Directly update player position
                 self.local_player.x = new_x
@@ -646,17 +755,62 @@ class GameClient:
         
         # Draw powerups
         for powerup_id, powerup in self.powerups.items():
-            powerup.draw(self.window)
-        
-        # Draw cannons - draw ALL cannons regardless of who controls them
+            powerup.draw(self.window)        # Draw cannons - draw ALL cannons regardless of who controls them
         for cannon_id, cannon in self.cannons.items():
             try:
-                # Draw the cannon as a bright yellow circle (easy to see)
-                pygame.draw.circle(self.window, (255, 255, 0), (int(cannon.x), int(cannon.y)), cannon.radius)
+                # Standardize all cannons to the same size (15 - size of exploding cannon)
+                standard_radius = 15
+                
+                # Set cannon color based on type
+                if cannon.type == "EXPLOSIVE":
+                    cannon_color = (255, 255, 0)  # Yellow for explosive
+                elif cannon.type == "BOUNCING":
+                    cannon_color = (0, 255, 0)    # Green for bouncing
+                elif cannon.type == "RAPID":
+                    cannon_color = (255, 0, 0)    # Red for rapid
+                else:
+                    cannon_color = (255, 255, 0)  # Default to yellow
+                
+                # Draw the cannon base circle with type-specific color
+                pygame.draw.circle(self.window, cannon_color, (int(cannon.x), int(cannon.y)), standard_radius)
+                
+                # Add type-specific iconography based on cannon type (all icons in black)
+                if cannon.type == "EXPLOSIVE":
+                    # Draw explosion-like icon (asterisk shape)
+                    for angle in range(0, 360, 45):
+                        rad_angle = math.radians(angle)
+                        start_x = int(cannon.x + (standard_radius * 0.4 * math.cos(rad_angle)))
+                        start_y = int(cannon.y + (standard_radius * 0.4 * math.sin(rad_angle)))
+                        end_x = int(cannon.x + (standard_radius * 0.9 * math.cos(rad_angle)))
+                        end_y = int(cannon.y + (standard_radius * 0.9 * math.sin(rad_angle)))
+                        pygame.draw.line(self.window, (0, 0, 0), (start_x, start_y), (end_x, end_y), 2)
+                
+                elif cannon.type == "BOUNCING":
+                    # Draw bounce icon (zigzag line)
+                    points = [
+                        (int(cannon.x - standard_radius * 0.7), int(cannon.y)),
+                        (int(cannon.x - standard_radius * 0.35), int(cannon.y - standard_radius * 0.5)),
+                        (int(cannon.x + standard_radius * 0.35), int(cannon.y + standard_radius * 0.5)),
+                        (int(cannon.x + standard_radius * 0.7), int(cannon.y))
+                    ]
+                    pygame.draw.lines(self.window, (0, 0, 0), False, points, 2)
+                
+                elif cannon.type == "RAPID":
+                    # Draw rapid fire icon (three parallel lines)
+                    line_length = standard_radius * 0.8
+                    for i in range(-1, 2):
+                        offset = i * 4
+                        pygame.draw.line(
+                            self.window,
+                            (0, 0, 0),
+                            (int(cannon.x - line_length/2), int(cannon.y + offset)),
+                            (int(cannon.x + line_length/2), int(cannon.y + offset)),
+                            2
+                        )
                 
                 # Draw a white outline around free cannons
                 if cannon.controlled_by is None:
-                    pygame.draw.circle(self.window, (255, 255, 255), (int(cannon.x), int(cannon.y)), cannon.radius + 2, 2)
+                    pygame.draw.circle(self.window, (255, 255, 255), (int(cannon.x), int(cannon.y)), standard_radius + 2, 2)
             except Exception as e:
                 print(f"Error drawing cannon {cannon_id}: {e}")
         
@@ -704,7 +858,7 @@ class GameClient:
             self.window.blit(text, (10, 30))
         
         # Draw controls help - updated to reflect the new Space key shooting
-        text = self.small_font.render("WASD: Move | E: Pick up cannon | SPACE: Shoot/Dash", True, WHITE)
+        text = self.small_font.render("WASD: Move | E: Pick up cannon | SPACE: Shoot", True, WHITE)
         self.window.blit(text, (WINDOW_WIDTH//2 - text.get_width()//2, WINDOW_HEIGHT - 30))
         
         # Draw messages
@@ -739,10 +893,6 @@ class GameClient:
         
         # Update messages
         self.update_messages()
-        
-        # Update dash cooldown
-        if self.local_player and self.local_player.alive and self.local_player.dash_cooldown > 0:
-            self.local_player.dash_cooldown = max(0, self.local_player.dash_cooldown - delta_time)
         
         # Interpolate positions for other players to reduce jitter
         current_time = time.time()

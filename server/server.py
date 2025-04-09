@@ -41,6 +41,11 @@ class GameServer:
         self.sudden_death = False
         self.sudden_death_timer = 120  # 2 minutes
         
+        # Auto-termination for empty server
+        self.empty_server_start_time = None
+        self.empty_server_timeout = 30  # Terminate after 30 seconds of inactivity
+        self.player_ever_joined = False  # Flag to track if any player has ever joined
+        
         # Generate map obstacles
         self.generate_obstacles()
     
@@ -74,16 +79,26 @@ class GameServer:
         update_thread.daemon = True
         update_thread.start()
         
+        # Set socket timeout to allow checking for server termination
+        self.socket.settimeout(1.0)  # 1 second timeout
+        
         # Accept client connections
         try:
             while self.running:
-                client_socket, addr = self.socket.accept()
-                print(f"New connection from {addr}")
-                
-                # Start a thread to handle this client
-                client_thread = threading.Thread(target=self.handle_client, args=(client_socket, addr))
-                client_thread.daemon = True
-                client_thread.start()
+                try:
+                    client_socket, addr = self.socket.accept()
+                    print(f"New connection from {addr}")
+                    
+                    # Start a thread to handle this client
+                    client_thread = threading.Thread(target=self.handle_client, args=(client_socket, addr))
+                    client_thread.daemon = True
+                    client_thread.start()
+                except socket.timeout:
+                    # Timeout allows checking if we should still be running
+                    continue
+                except Exception as e:
+                    if self.running:  # Only print errors if we're supposed to be running
+                        print(f"Socket accept error: {e}")
         except Exception as e:
             print(f"Server error: {e}")
         finally:
@@ -122,6 +137,7 @@ class GameServer:
                 x = random.randint(50, self.map_width - 50)
                 y = random.randint(50, self.map_height - 50)
                 color = player_info.get('color', (255, 0, 0))  # Default to red if not specified
+                name = player_info.get('name', f"Player_{random.randint(100, 999)}")  # Get player name or use default
                 
                 # Add player to the game
                 self.clients[client_id] = client_socket
@@ -130,12 +146,12 @@ class GameServer:
                     'x': x,
                     'y': y,
                     'color': color,
+                    'name': name,  # Store player name
                     'health': 100,
                     'alive': True,
                     'has_cannon': False,
                     'cannon_id': None,
                     'speed': 5,
-                    'dash_cooldown': 0
                 }
                 
                 # Send initial game state to client
@@ -163,6 +179,9 @@ class GameServer:
                     self.broadcast_message('game_start', {'message': 'Game starting!'})
                     # Spawn the first cannon
                     self.spawn_cannon()
+                
+                # Set player_ever_joined flag to True
+                self.player_ever_joined = True
             except json.JSONDecodeError as e:
                 print(f"Invalid JSON in registration: {e}")
                 return
@@ -253,10 +272,6 @@ class GameServer:
                     # Apply the update if it's valid
                     self.players[client_id]['x'] = new_x
                     self.players[client_id]['y'] = new_y
-                
-                # Update other player properties
-                if 'dash_cooldown' in player_data:
-                    self.players[client_id]['dash_cooldown'] = player_data['dash_cooldown']
         
         elif msg_type == 'cannon_pickup':
             # Player is trying to pick up a cannon
@@ -268,12 +283,6 @@ class GameServer:
             target_x = message.get('target_x')
             target_y = message.get('target_y')
             self.handle_cannon_shoot(client_id, target_x, target_y)
-        
-        elif msg_type == 'dash':
-            # Player is using dash ability
-            dx = message.get('dx', 0)
-            dy = message.get('dy', 0)
-            self.handle_player_dash(client_id, dx, dy)
 
         elif msg_type == 'ping':
             self.send_message_to_client(client_id, 'pong', {})
@@ -381,24 +390,6 @@ class GameServer:
                 'projectile': projectile
             })
     
-    def handle_player_dash(self, client_id, dx, dy):
-        """Handle a player using dash ability"""
-        player = self.players.get(client_id)
-        if not player or not player['alive']:
-            return
-        
-        # Check if dash is on cooldown
-        if player['dash_cooldown'] <= 0:
-            # Apply dash
-            player['dash_cooldown'] = 2  # 2 seconds cooldown
-            
-            # Broadcast dash effect
-            self.broadcast_message('player_dash', {
-                'player_id': client_id,
-                'dx': dx,
-                'dy': dy
-            })
-    
     def spawn_cannon(self):
         """Spawn a new cannon at a random location"""
         # Find a position not occupied by obstacles
@@ -484,12 +475,12 @@ class GameServer:
             
             # Check if out of bounds
             x, y = projectile['x'], projectile['y']
-            if x < 0 or x > self.map_width or y < 0 or y > self.map_height:
+            if x < 50 or x > self.map_width-50 or y < 50 or y > self.map_height-50:
                 if projectile['can_bounce'] and projectile['bounces'] > 0:
                     # Bounce off walls
-                    if x < 0 or x > self.map_width:
+                    if x < 50 or x > self.map_width-50:
                         projectile['dx'] = -projectile['dx']
-                    if y < 0 or y > self.map_height:
+                    if y < 50 or y > self.map_height-50:
                         projectile['dy'] = -projectile['dy']
                     projectile['bounces'] -= 1
                     # Adjust position to be within bounds
@@ -510,10 +501,13 @@ class GameServer:
                     dx = px - x
                     dy = py - y
                     distance = (dx*dx + dy*dy) ** 0.5
-                    
                     if distance < 20 + projectile['radius']:  # Player radius + projectile radius
                         # Player is hit
-                        player['health'] -= projectile['damage']
+                        # In sudden death mode, any hit is fatal
+                        if self.sudden_death:
+                            player['health'] = 0  # Instant elimination in sudden death
+                        else:
+                            player['health'] -= projectile['damage']  # Normal damage in regular mode
                         
                         # Check if player is eliminated
                         if player['health'] <= 0:
@@ -537,6 +531,15 @@ class GameServer:
                                 'player_id': player_id,
                                 'eliminator_id': projectile.get('owner_id')
                             })
+                            
+                            # Add a specific message for sudden death eliminations
+                            if self.sudden_death:
+                                self.broadcast_message('player_hit', {
+                                    'player_id': player_id,
+                                    'damage': player['health'],
+                                    'health': 0,
+                                    'sudden_death_kill': True
+                                })
                             
                             # Check if the game is over
                             alive_players = [p for p_id, p in self.players.items() if p['alive']]
@@ -574,8 +577,7 @@ class GameServer:
                         self.players[player_id]['health'] -= 50
                         self.players[player_id]['has_cannon'] = False
                         self.players[player_id]['cannon_id'] = None
-                        
-                        # Check if player is eliminated by explosion
+                          # Check if player is eliminated by explosion
                         if self.players[player_id]['health'] <= 0:
                             self.players[player_id]['alive'] = False
                             self.players[player_id]['health'] = 0
@@ -588,6 +590,17 @@ class GameServer:
                                 'player_id': player_id,
                                 'eliminator_id': None  # Eliminated by cannon explosion
                             })
+                            
+                            # Check if the game is over - THIS WAS MISSING
+                            alive_players = [p for p_id, p in self.players.items() if p['alive']]
+                            if len(alive_players) <= 1:
+                                # Game over - last player standing wins
+                                winner_id = alive_players[0]['id'] if alive_players else None
+                                self.broadcast_message('game_over', {
+                                    'winner_id': winner_id
+                                })
+                                # Reset the game in 10 seconds
+                                threading.Timer(10, self.reset_game).start()
                         
                         # Broadcast hit
                         self.broadcast_message('player_hit', {
@@ -671,6 +684,18 @@ class GameServer:
                     self.broadcast_game_update()
                 
                 last_update_time = current_time
+              # Check for server termination due to inactivity
+            if not self.clients and self.player_ever_joined and self.empty_server_start_time is None:
+                # Server just became empty after having players, start the timer
+                self.empty_server_start_time = current_time
+                print(f"All players disconnected. Server will terminate in {self.empty_server_timeout} seconds if no one joins.")
+            elif self.clients:
+                # Reset timer if any clients are connected
+                self.empty_server_start_time = None
+            elif self.empty_server_start_time and (current_time - self.empty_server_start_time) >= self.empty_server_timeout:
+                print(f"Server terminating after {self.empty_server_timeout} seconds with no players connected.")
+                self.running = False
+                break  # Exit the loop immediately
             
             # Sleep to avoid consuming too much CPU
             time.sleep(0.01)

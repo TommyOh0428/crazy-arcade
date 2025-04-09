@@ -18,6 +18,9 @@
     <a href="#contribution">Contribution</a>
 </p>
 
+## Gameplay
+[Game Demo](https://www.youtube.com/watch?v=Xbpw8sn5k-k)
+
 ### Team member
 
 - Tommy Oh (301544525)
@@ -50,13 +53,14 @@ The game follows a **client-server architecture**, where one player hosts the se
 
 ### 🎯 Power-ups    
 - **Speed boost** allows quick movement (short cooldown).  
-- **Health bar** decreases when hit; players are eliminated when it reaches zero.   
+- **Health boost** adds extra HP.   
 
 ### ⚡ Game Flow Enhancements  
 - **Power-ups** drop when a player is eliminated (e.g., speed boost, health pack).  
-- **Sudden Death Mode** activates if the match lasts too long (faster cannon fire, shrinking map).  
+- **Sudden Death Mode** activates if the match lasts too long (one-shot kill).  
 
-## Winning Condition  
+## Winning Condition
+- **Health bar** decreases when hit; players are eliminated when it reaches zero.  
 - The **last player alive wins**.  
 
 ## Technical Details  
